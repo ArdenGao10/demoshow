@@ -15,6 +15,7 @@ export default function Play({ form, deck, scripts, layout: initialLayout, onExi
   const [voiceIndex, setVoiceIndex] = useState(0);
   const [rate, setRate] = useState(0.9);
   const [subtitles, setSubtitles] = useState(true);
+  const [mouthOpen, setMouthOpen] = useState(false);
   const [layout, setLayout] = useState(initialLayout || "corner");
   const autoRef = useRef(false);
   const startedPageRef = useRef(-1);
@@ -67,6 +68,13 @@ export default function Play({ form, deck, scripts, layout: initialLayout, onExi
     const id = setInterval(() => setChars((c) => Math.min(line.length, c + 1)), Math.max(30, 58 / rate));
     return () => clearInterval(id);
   }, [playing, line, rate]);
+
+  // Flap the mouth open/closed while speaking so the character reads as talking.
+  useEffect(() => {
+    if (!playing) { setMouthOpen(false); return; }
+    const id = setInterval(() => setMouthOpen((m) => !m), 170);
+    return () => clearInterval(id);
+  }, [playing]);
 
   const go = (next) => {
     autoRef.current = false;
@@ -151,7 +159,7 @@ export default function Play({ form, deck, scripts, layout: initialLayout, onExi
           : <div className="sketch r2" style={positions.subtitle}><b style={{ color: "var(--orange)", marginRight: 12 }}>{form?.name}</b><span style={{ color: "#fff", fontSize: 17, lineHeight: 1.5 }}>{line.slice(0, chars || line.length)}{playing && <span style={{ color: "var(--orange)" }}>▍</span>}</span></div>
       )}
 
-      <PresenterStage form={form} playing={playing} layout={layout} style={positions.presenter} />
+      <PresenterStage form={form} playing={playing} mouthOpen={mouthOpen} layout={layout} style={positions.presenter} />
     </main>
     <footer style={{ height: 76, flex: "0 0 76px", display: "flex", alignItems: "center", gap: 14, padding: "0 26px", borderTop: "2.4px solid var(--ink)", background: "var(--paper-card)" }}>
       <button className="icon-btn" disabled={page === 0} onClick={() => go(page - 1)}>⏮</button>
@@ -164,8 +172,10 @@ export default function Play({ form, deck, scripts, layout: initialLayout, onExi
   </div>;
 }
 
-function PresenterStage({ form, playing, layout, style }) {
-  const glyph = <FormGlyph form={form} expr={playing ? "wow" : "smile"} className={playing ? "talk" : ""} height={layout === "pip" ? 120 : 155} />;
+function PresenterStage({ form, playing, mouthOpen, layout, style }) {
+  // Animate the mouth while speaking (open/closed) instead of a frozen "wow".
+  const expr = playing ? (mouthOpen ? "wow" : "happy") : "smile";
+  const glyph = <FormGlyph form={form} expr={expr} className={playing ? "talk" : ""} height={layout === "pip" ? 120 : 155} />;
 
   // C · 极简画中画 — circular PiP badge bottom-right + "在这儿 ↘" hint above.
   if (layout === "pip") return (
