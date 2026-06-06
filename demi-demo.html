@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1280, height=720">
+<title>Demi · 产品介绍</title>
+<style>
+  /* ── Demi 演示稿 ──────────────────────────────────────────────
+     刻意采用「active 类切换」的隐藏方式：所有 .slide 默认 opacity:0，
+     只有 .slide.active 显示。这正是过去会导致「切页空白」的写法，
+     现在 Demi 的隔离逻辑已能正确处理它。 */
+  :root{
+    --paper:#F7EFD9; --paper-2:#F1E6CC; --ink:#3B332E; --ink-soft:#7A6F63;
+    --orange:#F2A007; --orange-deep:#D6840A; --orange-pale:#FBE6BE;
+    --sage:#7FA66A; --blue:#5B7DB1; --card:#FFFDF7;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{width:1280px;height:720px;overflow:hidden;background:var(--paper);}
+  body{
+    font-family:"PingFang SC","Helvetica Neue","Microsoft YaHei",Arial,sans-serif;
+    color:var(--ink); position:relative;
+  }
+
+  /* 每页堆叠铺满，用透明度切换 —— 关键：默认全部隐藏 */
+  .slide{
+    position:absolute; inset:0; width:1280px; height:720px;
+    opacity:0; visibility:hidden; transition:opacity .35s ease;
+    padding:64px 84px; display:flex; flex-direction:column;
+  }
+  .slide.active{ opacity:1; visibility:visible; }
+
+  /* 手绘纸张外框 */
+  .frame{
+    position:absolute; inset:22px; border:3px solid var(--ink);
+    border-radius:26px 22px 30px 20px; background:var(--card);
+    box-shadow:6px 7px 0 rgba(59,51,46,.12);
+  }
+  .slide > *{ position:relative; z-index:1; }
+
+  /* 页码 + 右侧圆点导航 */
+  .pageno{ position:absolute; top:40px; right:74px; font-size:18px; color:var(--ink-soft); letter-spacing:1px; z-index:2;}
+  .pageno b{ color:var(--orange-deep); font-size:24px; }
+  .dots{ position:absolute; right:48px; top:50%; transform:translateY(-50%); display:flex; flex-direction:column; gap:11px; z-index:2;}
+  .dots i{ width:9px; height:9px; border-radius:50%; background:#D9CDB4; display:block; }
+  .dots i.on{ background:var(--orange); height:22px; border-radius:6px; }
+
+  /* 文字系统 */
+  .kicker{ font-size:18px; font-weight:800; letter-spacing:3px; text-transform:uppercase; color:var(--orange-deep); margin-bottom:18px; }
+  h1{ font-size:76px; font-weight:900; line-height:1.04; letter-spacing:-1px; }
+  h2{ font-size:46px; font-weight:850; line-height:1.12; margin-bottom:26px; }
+  .lead{ font-size:27px; color:var(--ink-soft); line-height:1.5; max-width:760px; margin-top:22px; }
+  .spacer{ flex:1; }
+
+  .brand{ display:flex; align-items:center; gap:13px; font-weight:900; font-size:23px; letter-spacing:1px; }
+  .logo{ width:38px; height:38px; border-radius:11px 9px 12px 8px; background:var(--orange); border:2.5px solid var(--ink);
+         display:flex; align-items:center; justify-content:center; color:#fff; font-size:22px; box-shadow:2px 2px 0 rgba(59,51,46,.18);}
+  .tagline{ font-size:21px; color:var(--ink-soft); font-weight:600; }
+
+  /* 角色（尾尾）简笔 SVG 容器 */
+  .weiwei{ position:absolute; right:90px; bottom:70px; width:230px; text-align:center; z-index:2;}
+  .weiwei .bubble{ display:inline-block; background:#fff; border:2.5px solid var(--ink); border-radius:16px 16px 16px 4px;
+    padding:9px 15px; font-size:17px; font-weight:700; margin-bottom:14px; box-shadow:3px 3px 0 rgba(59,51,46,.12);}
+  .ground{ width:150px; height:18px; background:rgba(59,51,46,.12); border-radius:50%; margin:-6px auto 0;}
+
+  /* 卡片 / 列表 / 步骤 */
+  .cards{ display:grid; grid-template-columns:repeat(3,1fr); gap:22px; margin-top:14px;}
+  .card{ background:var(--paper); border:2.5px solid var(--ink); border-radius:16px 14px 18px 12px; padding:24px 22px;
+         box-shadow:4px 4px 0 rgba(59,51,46,.1);}
+  .card .ico{ font-size:34px; margin-bottom:12px;}
+  .card h3{ font-size:25px; font-weight:850; margin-bottom:8px;}
+  .card p{ font-size:18px; color:var(--ink-soft); line-height:1.45;}
+
+  .steps{ display:grid; grid-template-columns:repeat(3,1fr); gap:18px 26px; margin-top:18px; counter-reset:s;}
+  .step{ display:flex; gap:16px; align-items:flex-start;}
+  .step .n{ flex:0 0 52px; height:52px; border-radius:50%; background:var(--orange-pale); border:2.5px solid var(--ink);
+            display:flex; align-items:center; justify-content:center; font-size:24px; font-weight:900; color:var(--orange-deep);}
+  .step h3{ font-size:22px; font-weight:800;}
+  .step p{ font-size:17px; color:var(--ink-soft); line-height:1.4; margin-top:3px;}
+
+  .rows{ margin-top:18px; display:flex; flex-direction:column; gap:18px;}
+  .row{ display:flex; align-items:center; gap:22px; background:var(--paper); border:2.5px solid var(--ink);
+        border-radius:14px; padding:18px 24px; box-shadow:4px 4px 0 rgba(59,51,46,.08);}
+  .row .tag{ flex:0 0 110px; font-weight:900; color:#fff; background:var(--ink); border-radius:9px; padding:8px 6px; text-align:center; font-size:18px;}
+  .row .tag.c{background:var(--orange-deep);} .row .tag.r{background:var(--sage);} .row .tag.p{background:var(--blue);}
+  .row h3{ font-size:24px; font-weight:850;} .row p{ font-size:18px; color:var(--ink-soft); margin-top:2px;}
+
+  .stat-row{ display:flex; gap:64px; margin-top:30px;}
+  .stat .big{ font-size:82px; font-weight:900; line-height:1; color:var(--orange-deep);}
+  .stat .lab{ font-size:20px; color:var(--ink-soft); margin-top:8px;}
+
+  .pill{ display:inline-block; background:var(--orange-pale); border:2px solid var(--orange-deep); color:var(--orange-deep);
+         font-weight:800; font-size:16px; padding:5px 14px; border-radius:20px; margin:0 8px 10px 0;}
+
+  .center{ align-items:center; justify-content:center; text-align:center; }
+  .center .lead{ margin-left:auto; margin-right:auto; }
+  .cta{ display:inline-block; margin-top:30px; background:var(--orange); border:3px solid var(--ink); color:#fff;
+        font-size:26px; font-weight:900; padding:16px 40px; border-radius:16px 14px 18px 12px; box-shadow:5px 5px 0 rgba(59,51,46,.18);}
+</style>
+</head>
+<body>
+<main class="deck">
+
+<!-- 1 · 封面 -->
+<section class="slide active">
+  <div class="frame"></div>
+  <div class="pageno"><b>01</b> / 09</div>
+  <div class="dots"><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  <div class="brand"><span class="logo">✦</span>Demi</div>
+  <div class="spacer"></div>
+  <div class="kicker">不用出镜的 AI 演示助手</div>
+  <h1>你的 PPT，<br>有人替你开口讲。</h1>
+  <p class="lead">上传幻灯片，选一个可爱的讲解角色，Demi 自动写讲稿、开口讲解、逐页自动播放。</p>
+  <div class="spacer"></div>
+  <div class="tagline">演示者：尾尾 · 你的 AI 讲解搭子 🐾</div>
+</section>
+
+<!-- 2 · 痛点 -->
+<section class="slide">
+  <div class="frame"></div>
+  <div class="pageno"><b>02</b> / 09</div>
+  <div class="dots"><i></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  <div class="kicker">为什么需要 Demi</div>
+  <h2>有 PPT，却不想出镜、没空录。</h2>
+  <p class="lead">很多人已经做好了完整的幻灯片，但卡在最后一步——</p>
+  <div class="cards">
+    <div class="card"><div class="ico">🙈</div><h3>不想露脸</h3><p>不爱对着镜头，也不想反复 NG 重录。</p></div>
+    <div class="card"><div class="ico">⏱️</div><h3>没有时间</h3><p>一页页讲、一遍遍录，太耗时间。</p></div>
+    <div class="card"><div class="ico">🎙️</div><h3>不擅讲解</h3><p>照着念很生硬，讲不出承上启下。</p></div>
+  </div>
+</section>
+
+<!-- 3 · 解决方案 -->
+<section class="slide center">
+  <div class="frame"></div>
+  <div class="pageno"><b>03</b> / 09</div>
+  <div class="dots"><i></i><i></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  <div class="kicker">Demi 怎么做</div>
+  <h2>让一个可爱的 AI，<br>站在你的幻灯片旁边讲。</h2>
+  <p class="lead">幻灯片永远是主角，原样展示，绝不被改成卡通页面。<br>角色只待在角落，有表情、有动作、字幕同步。</p>
+</section>
+
+<!-- 4 · 工作流程 -->
+<section class="slide">
+  <div class="frame"></div>
+  <div class="pageno"><b>04</b> / 09</div>
+  <div class="dots"><i></i><i></i><i></i><i class="on"></i><i></i><i></i><i></i><i></i><i></i></div>
+  <div class="kicker">六步上手</div>
+  <h2>从上传到开讲，点一次就好。</h2>
+  <div class="steps">
+    <div class="step"><div class="n">1</div><div><h3>选角色</h3><p>默认尾尾，可逛素材库更换。</p></div></div>
+    <div class="step"><div class="n">2</div><div><h3>传幻灯片</h3><p>上传 HTML PPT，立刻预览第一页。</p></div></div>
+    <div class="step"><div class="n">3</div><div><h3>定语气</h3><p>轻松 / 专业 / 元气，按需选。</p></div></div>
+    <div class="step"><div class="n">4</div><div><h3>选布局</h3><p>角落、舞台、画中画三选一。</p></div></div>
+    <div class="step"><div class="n">5</div><div><h3>生成讲稿</h3><p>GLM 逐页写口播稿。</p></div></div>
+    <div class="step"><div class="n">6</div><div><h3>一键播放</h3><p>自动朗读 + 自动翻页。</p></div></div>
+  </div>
+</section>
+
+<!-- 5 · 三种形态 -->
+<section class="slide">
+  <div class="frame"></div>
+  <div class="pageno"><b>05</b> / 09</div>
+  <div class="dots"><i></i><i></i><i></i><i></i><i class="on"></i><i></i><i></i><i></i><i></i></div>
+  <div class="kicker">三种演示形态</div>
+  <h2>同一份 PPT，三种出场方式。</h2>
+  <div class="rows">
+    <div class="row"><span class="tag c">角落陪讲</span><div><h3>corner</h3><p>幻灯片偏左，角色待在右下角，几乎不挡内容。</p></div></div>
+    <div class="row"><span class="tag r">舞台讲解</span><div><h3>runway</h3><p>幻灯片居中，角色站在下方舞台，像登台演讲。</p></div></div>
+    <div class="row"><span class="tag p">画中画</span><div><h3>pip</h3><p>幻灯片放到最大，角色缩成圆形画中画徽章。</p></div></div>
+  </div>
+</section>
+
+<!-- 6 · 自动播放 -->
+<section class="slide center">
+  <div class="frame"></div>
+  <div class="pageno"><b>06</b> / 09</div>
+  <div class="dots"><i></i><i></i><i></i><i></i><i></i><i class="on"></i><i></i><i></i><i></i></div>
+  <div class="kicker">核心体验</div>
+  <h2>点一次播放，<br>剩下交给 Demi。</h2>
+  <p class="lead">当前页讲完，自动翻到下一页继续讲，直到结束。<br>上一页 / 下一页只是手动干预，不是必需操作。</p>
+  <div style="margin-top:8px;">
+    <span class="pill">▶ 自动朗读</span><span class="pill">↻ 自动翻页</span>
+    <span class="pill">⏸ 随时暂停</span><span class="pill">💬 字幕同步</span>
+  </div>
+</section>
+
+<!-- 7 · 语音与讲稿 -->
+<section class="slide">
+  <div class="frame"></div>
+  <div class="pageno"><b>07</b> / 09</div>
+  <div class="dots"><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i><i></i><i></i></div>
+  <div class="kicker">讲稿与语音</div>
+  <h2>不是念字幕，是真的在讲。</h2>
+  <p class="lead">GLM 生成口语化、承上启下的逐页讲稿；浏览器 TTS 优先挑自然中文音色，默认语速稍慢。</p>
+  <div class="stat-row">
+    <div class="stat"><div class="big">0.9×</div><div class="lab">默认语速 · 更自然不机械</div></div>
+    <div class="stat"><div class="big">逐页</div><div class="lab">每页一段，承上启下</div></div>
+    <div class="stat"><div class="big">可调</div><div class="lab">音色 / 语速 / 字幕开关</div></div>
+  </div>
+</section>
+
+<!-- 8 · 设计原则 -->
+<section class="slide">
+  <div class="frame"></div>
+  <div class="pageno"><b>08</b> / 09</div>
+  <div class="dots"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i><i></i></div>
+  <div class="kicker">我们坚持的</div>
+  <h2>四条原则，不打折扣。</h2>
+  <div class="cards">
+    <div class="card"><div class="ico">🖼️</div><h3>幻灯片是主角</h3><p>原样展示，不遮挡、不裁剪、不改成卡通。</p></div>
+    <div class="card"><div class="ico">👆</div><h3>点一次就播完</h3><p>自动朗读、自动翻页，直到结束。</p></div>
+    <div class="card"><div class="ico">🐾</div><h3>角色有生命感</h3><p>表情、动作、字幕同步的讲解搭子。</p></div>
+  </div>
+  <p class="lead" style="margin-top:24px;">还有第四条：<b style="color:var(--ink)">不允许伪交互</b> —— 看起来能点的按钮，必须真的能用。</p>
+</section>
+
+<!-- 9 · 结尾 CTA -->
+<section class="slide center">
+  <div class="frame"></div>
+  <div class="pageno"><b>09</b> / 09</div>
+  <div class="dots"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+  <div class="brand" style="justify-content:center;"><span class="logo">✦</span>Demi</div>
+  <div class="spacer" style="flex:0 0 28px;"></div>
+  <h1>把开口讲解，<br>交给尾尾。</h1>
+  <p class="lead">你只管做好 PPT，剩下的让 Demi 替你站上台。</p>
+  <div class="cta">✨ 现在就上传一份试试 →</div>
+  <div class="weiwei" style="position:static;margin-top:34px;">
+    <div class="bubble">这页讲完啦，谢谢观看~ 🎉</div>
+  </div>
+</section>
+
+</main>
+</body>
+</html>

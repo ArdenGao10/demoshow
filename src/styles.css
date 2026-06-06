@@ -1,0 +1,168 @@
+/* styles.css — Demi hand-drawn wireframe system */
+@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Caveat:wght@500;600;700&family=Quicksand:wght@400;500;600;700&display=swap');
+
+:root{
+  --paper:#FBF3E4;       /* warm cream */
+  --paper-2:#F5E8CF;     /* deeper cream */
+  --paper-card:#FFFBF2;  /* near-white card */
+  --ink:#3B332E;         /* charcoal ink */
+  --ink-soft:#7A6F63;    /* muted brown */
+  --orange:#E8915B;      /* warm orange */
+  --orange-deep:#D2703A; /* deep orange */
+  --orange-pale:#F8D9BF;
+  --wood:#D8B583;
+  --wood-deep:#B8895A;
+  --sage:#8FAE6B;
+  --blue:#7FA0C0;
+  --rose:#D98AA0;
+
+  --font-round:'Fredoka', sans-serif;
+  --font-hand:'Caveat', cursive;
+  --font-body:'Quicksand', sans-serif;
+}
+
+*{ box-sizing:border-box; }
+html,body,#root{ width:100%; height:100%; margin:0; }
+body{ min-width:960px; }
+button,input{ font:inherit; }
+button:focus-visible,input:focus-visible{ outline:3px solid var(--orange); outline-offset:3px; }
+
+.screen{
+  width:100%; height:100%;
+  background:var(--paper);
+  color:var(--ink);
+  font-family:var(--font-body);
+  position:relative;
+  overflow:hidden;
+}
+
+/* hand-drawn box: irregular border radius reads as a wobbly pen outline */
+.sketch{
+  border:2.6px solid var(--ink);
+  border-radius:255px 14px 225px 16px/16px 225px 18px 255px;
+  background:var(--paper-card);
+}
+.sketch.alt{ border-radius:18px 230px 16px 240px/235px 16px 245px 14px; }
+.sketch.r2{ border-radius:200px 18px 210px 14px/14px 205px 16px 215px; }
+
+/* dashed sketch (dropzones) */
+.sketch-dash{
+  border:2.6px dashed var(--ink);
+  border-radius:200px 18px 210px 14px/14px 205px 16px 215px;
+}
+
+/* primary button — filled warm orange */
+.btn-demi{
+  font-family:var(--font-round); font-weight:600;
+  background:var(--orange); color:#fff;
+  border:2.6px solid var(--ink);
+  border-radius:140px 12px 150px 14px/14px 150px 12px 140px;
+  padding:14px 26px; font-size:18px; cursor:pointer;
+  box-shadow:3px 4px 0 var(--ink);
+  display:inline-flex; align-items:center; gap:10px; white-space:nowrap;
+  transition:transform .12s, box-shadow .12s;
+}
+.btn-demi:hover{ transform:translate(1px,1px); box-shadow:2px 2px 0 var(--ink); }
+
+.btn-ghost{
+  font-family:var(--font-round); font-weight:500;
+  background:transparent; color:var(--ink);
+  border:2.4px solid var(--ink);
+  border-radius:130px 12px 140px 12px/12px 140px 12px 130px;
+  padding:12px 22px; font-size:16px; cursor:pointer;
+  display:inline-flex; align-items:center; gap:8px; white-space:nowrap;
+}
+
+/* text input */
+.field{
+  font-family:var(--font-body); font-size:16px; color:var(--ink);
+  background:#fff; width:100%;
+  border:2.4px solid var(--ink);
+  border-radius:160px 12px 150px 14px/14px 150px 12px 160px;
+  padding:13px 18px; outline:none;
+}
+.field::placeholder{ color:#B6AB9C; }
+
+/* handwritten sticky annotation */
+.tag{
+  font-family:var(--font-hand); font-weight:700;
+  color:var(--orange-deep); font-size:22px; line-height:1.05;
+  position:absolute;
+}
+.tag .arrow{ display:block; }
+
+/* pill / chip */
+.chip{
+  font-family:var(--font-body); font-weight:600; font-size:13px;
+  border:2.2px solid var(--ink); border-radius:40px;
+  padding:5px 12px; background:#fff; display:inline-flex; align-items:center; gap:6px; white-space:nowrap;
+}
+
+/* headings */
+.h-hero{ font-family:var(--font-round); font-weight:700; letter-spacing:-.5px; }
+.h-title{ font-family:var(--font-round); font-weight:600; }
+.hand{ font-family:var(--font-hand); }
+
+/* a dotted hand-drawn ground oval for Demi to stand on */
+.ground-oval{
+  background:var(--wood);
+  border:2.4px solid var(--ink);
+  border-radius:50%;
+}
+
+/* subtle paper speckle */
+.speckle::before{
+  content:""; position:absolute; inset:0; pointer-events:none;
+  background-image:radial-gradient(var(--ink) .6px, transparent .6px);
+  background-size:22px 22px; opacity:.05;
+}
+
+/* spinning / bobbing helpers (loading) */
+@keyframes bob{ 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(-10px);} }
+@keyframes floatDot{ 0%,100%{ transform:translateY(0); opacity:.55;} 50%{ transform:translateY(-6px); opacity:1;} }
+@keyframes sway{ 0%,100%{ transform:rotate(-3deg);} 50%{ transform:rotate(3deg);} }
+.bob{ animation:bob 2.4s ease-in-out infinite; }
+.sway{ animation:sway 3s ease-in-out infinite; transform-origin:bottom center; }
+
+@keyframes demiIn{ from{ transform:translateX(300px); opacity:0; } to{ transform:translateX(0); opacity:1; } }
+
+/* presenter liveliness — sway on the outer wrapper, bob on the inner while talking */
+@keyframes talkBob{ 0%,100%{ transform:translateY(0); } 50%{ transform:translateY(-5px);} }
+.talk{ animation:talkBob 1s ease-in-out infinite; }
+@keyframes blink2{ 0%,92%,100%{ transform:scaleY(1);} 96%{ transform:scaleY(.6);} }
+
+.icon-btn{
+  width:42px;height:42px;border-radius:50%;border:2.6px solid var(--ink);
+  background:#fff;color:var(--ink);cursor:pointer;box-shadow:2px 3px 0 var(--ink);
+  display:flex;align-items:center;justify-content:center;
+}
+.icon-btn.big{ width:54px;height:54px;background:var(--orange);color:#fff;font-size:18px; }
+.icon-btn:disabled{ opacity:.3;cursor:default;box-shadow:none; }
+.lib-card:hover{ transform:translateY(-3px); }
+.clickable{ cursor:pointer; }
+
+/* ---- Color schemes (set data-palette on the root container) ---------- */
+[data-palette="warm"]{
+  --paper:#FBF3E4; --paper-2:#F5E8CF; --paper-card:#FFFBF2;
+  --ink:#3B332E; --ink-soft:#7A6F63;
+  --orange:#E8915B; --orange-deep:#D2703A; --orange-pale:#F8D9BF;
+  --wood:#D8B583; --wood-deep:#B8895A; --sage:#8FAE6B;
+}
+[data-palette="woody"]{
+  --paper:#F1E6CF; --paper-2:#E6D6B6; --paper-card:#FBF4E4;
+  --ink:#43382E; --ink-soft:#7E6E59;
+  --orange:#C98A4E; --orange-deep:#A9692F; --orange-pale:#EBD3B0;
+  --wood:#C9A063; --wood-deep:#9E7642; --sage:#86996A;
+}
+[data-palette="cream"]{
+  --paper:#FCF7EE; --paper-2:#F2E7D5; --paper-card:#FFFFFF;
+  --ink:#4A4039; --ink-soft:#8A7C6E;
+  --orange:#ECA77C; --orange-deep:#D98A5C; --orange-pale:#F8DFC9;
+  --wood:#E2C99C; --wood-deep:#C4A572; --sage:#9DB785;
+}
+[data-palette="clay"]{
+  --paper:#F6E7DA; --paper-2:#EAD2BF; --paper-card:#FDF3EA;
+  --ink:#3A2C25; --ink-soft:#7C6357;
+  --orange:#D2703A; --orange-deep:#AE4F22; --orange-pale:#F0C9AC;
+  --wood:#CC9266; --wood-deep:#A56A41; --sage:#8B9A66;
+}

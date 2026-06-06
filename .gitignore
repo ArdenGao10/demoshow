@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.env
+.DS_Store
+*.local
+server/data/users.json
+
+# 设计稿仅保留在本地，不推送到远程
+design/
+uploads/
+
+# 个人/测试用的幻灯片（你本地拖进来的，不入库）
+pitch.html
+小满诊室*.html
+*二面准备*.html

@@ -1,0 +1,25 @@
+{
+  "name": "demi",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Demi — 不用出镜的 AI 演示助手。选形态 → 上传 HTML PPT → GLM 生成讲稿 → 逐页语音+动效播放。",
+  "scripts": {
+    "dev": "concurrently -n web,api -c cyan,magenta \"vite\" \"node server/index.js\"",
+    "server": "node server/index.js",
+    "web": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "vite": "^6.0.7"
+  }
+}
