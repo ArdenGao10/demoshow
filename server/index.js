@@ -119,7 +119,7 @@ app.post("/api/generate", async (req, res) => {
 
     // Abort if GLM hangs — never leave the user stuck on the loading screen.
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), Number(process.env.GLM_TIMEOUT_MS) || 30000);
+    const timer = setTimeout(() => ctrl.abort(), Number(process.env.GLM_TIMEOUT_MS) || 45000);
     let resp;
     try {
       resp = await fetch(GLM_URL, {
