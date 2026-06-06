@@ -11,16 +11,11 @@ export default function Login({ onAuth, onBack }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const submit = async (e) => {
+  // 演示用：假登录——不校验后端，点一下直接进入。
+  const submit = (e) => {
     e.preventDefault();
-    setBusy(true); setError("");
-    try {
-      const res = await fetch(`/api/auth/${mode}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, email, password }) });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "操作失败");
-      localStorage.setItem("demi_token", data.token);
-      onAuth(data.user);
-    } catch (err) { setError(err.message); } finally { setBusy(false); }
+    const display = name.trim() || (email.split("@")[0] || "访客");
+    onAuth({ id: "local-demo", name: display, email: email.trim() || "guest@demi.local" });
   };
 
   return <div className="screen speckle" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -34,7 +29,7 @@ export default function Login({ onAuth, onBack }) {
         <Field label="邮箱" type="email" value={email} onChange={setEmail} placeholder="you@studio.com" />
         <Field label="密码" type="password" value={password} onChange={setPassword} placeholder="至少 6 位" />
         {error && <div style={{ color: "#a33", fontSize: 13, fontWeight: 700, marginBottom: 12 }}>{error}</div>}
-        <button type="submit" className="btn-demi" disabled={busy} style={{ width: "100%", justifyContent: "center" }}>{busy ? "处理中…" : mode === "login" ? "登录并继续 →" : "注册并开始 →"}</button>
+        <button type="submit" className="btn-demi" style={{ width: "100%", justifyContent: "center" }}>{mode === "login" ? "登录并继续 →" : "注册并开始 →"}</button>
       </form>
     </div>
     <BlackCat style={{ height: 50, position: "absolute", bottom: 42, left: 150 }} /><GrassTuft style={{ height: 34, position: "absolute", bottom: 40, left: 250 }} />
@@ -42,5 +37,5 @@ export default function Login({ onAuth, onBack }) {
 }
 
 function Field({ label, value, onChange, placeholder, type = "text" }) {
-  return <label style={{ display: "block", fontSize: 13, fontWeight: 700, color: "var(--ink-soft)", marginBottom: 14 }}>{label}<input required type={type} className="field" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} style={{ marginTop: 6 }} /></label>;
+  return <label style={{ display: "block", fontSize: 13, fontWeight: 700, color: "var(--ink-soft)", marginBottom: 14 }}>{label}<input type={type} className="field" value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} style={{ marginTop: 6 }} /></label>;
 }
