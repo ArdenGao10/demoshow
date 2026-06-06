@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { FormGlyph, HUMANS, PETS, CHIBI, findForm } from "../lib/characters.jsx";
-import { parseDeckHtml, SAMPLE_DECK_HTML } from "../lib/slides.js";
+import { parseDeckHtml, SAMPLE_DECK_HTML, SAMPLE_SCRIPTS } from "../lib/slides.js";
 import SlideFrame from "../components/SlideFrame.jsx";
 import { start as demiStart, stop as demiStop } from "../lib/demiWidget.js";
 import { formFrames } from "../lib/charFrames.jsx";
@@ -30,7 +30,13 @@ export default function Create({ formId, tone, layout, error, onPickForm, onPick
       window.alert(err.message || "HTML 读取失败");
     } finally { setReading(false); }
   };
-  const useSample = () => setDeck(parseDeckHtml(SAMPLE_DECK_HTML, "northwind-demo.html"));
+  const buildSample = () => {
+    const d = parseDeckHtml(SAMPLE_DECK_HTML, "Demi 示例稿.html");
+    d.builtinScripts = SAMPLE_SCRIPTS; // 内置讲稿：点示例稿即用，无需等 GLM
+    return d;
+  };
+  const useSample = () => setDeck(buildSample());                // 仅载入到预览
+  const trySample = () => onGenerate(buildSample());             // 一键载入 + 直接开讲
   const clearDeck = () => { setDeck(null); if (inputRef.current) inputRef.current.value = ""; };
 
   return (
@@ -62,7 +68,10 @@ export default function Create({ formId, tone, layout, error, onPickForm, onPick
                 <div className="sketch-dash" role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") inputRef.current?.click(); }} onClick={() => inputRef.current?.click()} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); loadFile(e.dataTransfer.files?.[0]); }} style={{ padding: 18, textAlign: "center", cursor: "pointer" }}>
                   <div style={{ fontSize: 26 }}>⬆</div><b>{reading ? "正在读取…" : "拖到这里，或点击上传"}</b>
                 </div>
-                <button style={{ ...textButton, marginTop: 10 }} onClick={useSample}>没有文件？使用内置示例稿 →</button>
+                <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 10, flexWrap: "wrap" }}>
+                  <button className="btn-demi" onClick={trySample} style={{ padding: "10px 18px", fontSize: 15 }}>▶ 用 Demi 示例稿试讲</button>
+                  <button style={textButton} onClick={useSample}>或先放进预览 →</button>
+                </div>
               </>
             ) : (() => {
               const m = deck.method || "";

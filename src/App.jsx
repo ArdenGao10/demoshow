@@ -44,6 +44,12 @@ export default function App() {
       setDeck(parsedDeck);
       setScripts(null);
       setError("");
+      // 内置讲稿（如 Demi 示例稿）：直接用，不必走 GLM。
+      if (parsedDeck.builtinScripts) {
+        setScripts(parsedDeck.builtinScripts);
+        setRoute("play");
+        return;
+      }
       setRoute("loading");
       try {
         const result = await generateScripts({

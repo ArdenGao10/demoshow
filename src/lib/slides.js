@@ -297,46 +297,186 @@ ${deck.headStyles}
 export const SLIDE_W = 1280;
 export const SLIDE_H = 720;
 
-// A tiny built-in sample deck so the flow is demoable without a file on hand.
-export const SAMPLE_DECK_HTML = `<!doctype html><html><head><style>
-  .slide{width:1280px;height:720px;font-family:'Helvetica Neue',Arial,sans-serif;color:#1f2937;padding:80px 96px;background:#fff;}
-  .slide.dark{background:#0F172A;color:#fff;display:flex;flex-direction:column;justify-content:center;}
-  .brand{display:flex;align-items:center;gap:10px;margin-bottom:40px;font-weight:700;letter-spacing:1px;}
-  .dot{width:22px;height:22px;background:#3B82F6;border-radius:4px;}
-  h1{font-size:84px;font-weight:800;margin:0;line-height:1.05;}
-  h2{font-size:52px;font-weight:700;margin:0 0 40px;}
-  .kicker{font-size:20px;font-weight:600;color:#2563EB;letter-spacing:1px;text-transform:uppercase;margin-bottom:14px;}
-  .sub{font-size:30px;color:#94A3B8;margin-top:24px;}
-  .row{display:flex;gap:8%;align-items:flex-end;}
-  .bars{display:flex;gap:24px;align-items:flex-end;height:240px;flex:1;}
-  .bar{flex:1;border-radius:6px 6px 0 0;background:#BFDBFE;}
-  .bar.hot{background:#2563EB;}
-  .stat{flex:1;}
-  .big{font-size:96px;font-weight:800;line-height:1;}
-  .note{font-size:24px;color:#6B7280;margin-top:18px;}
-  .item{display:flex;align-items:center;gap:32px;margin-bottom:34px;}
-  .num{font-size:48px;font-weight:800;color:#BFDBFE;width:70px;}
-  .it-t{font-size:36px;font-weight:700;}
-  .it-d{font-size:22px;color:#6B7280;margin-top:6px;}
+// 内置示例稿：一份手绘风的 Demi 介绍稿（与产品视觉统一），配套讲稿见 SAMPLE_SCRIPTS。
+// 点「使用内置示例稿」即可直接体验"上传 HTML → 小人逐页讲"的完整流程。
+const DEMI_FIGURE = `<svg class="demi" viewBox="0 0 152 200" fill="none" aria-hidden="true">
+  <path d="M75 80 C99 80 101 112 99 130 C97 150 88 161 75 161 C62 161 53 150 51 130 C49 112 51 80 75 80 Z" fill="#FBF3E4" stroke="#3B332E" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M67 159 L63 184" stroke="#3B332E" stroke-width="4" stroke-linecap="round"/>
+  <path d="M85 159 L89 184" stroke="#3B332E" stroke-width="4" stroke-linecap="round"/>
+  <ellipse cx="61" cy="186" rx="10" ry="6" fill="#C9702F" stroke="#3B332E" stroke-width="3"/>
+  <ellipse cx="91" cy="186" rx="10" ry="6" fill="#C9702F" stroke="#3B332E" stroke-width="3"/>
+  <circle cx="76" cy="48" r="33" fill="#FBF3E4" stroke="#3B332E" stroke-width="4"/>
+  <path d="M76 16 q10 -7 6 -15 q-1 7 -6 10" fill="#FBF3E4" stroke="#3B332E" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M54 81 q22 13 44 0" stroke="#E8915B" stroke-width="9" fill="none" stroke-linecap="round"/>
+  <path d="M95 82 q7 9 3 19" stroke="#E8915B" stroke-width="9" fill="none" stroke-linecap="round"/>
+  <ellipse cx="58" cy="57" rx="6.5" ry="4.4" fill="#F3B58C" opacity=".7"/>
+  <ellipse cx="93" cy="57" rx="6.5" ry="4.4" fill="#F3B58C" opacity=".7"/>
+  <circle cx="67" cy="47" r="4" fill="#3B332E"/><circle cx="86" cy="47" r="4" fill="#3B332E"/>
+  <circle cx="68.4" cy="45.6" r="1.2" fill="#fff"/><circle cx="87.4" cy="45.6" r="1.2" fill="#fff"/>
+  <path d="M68 61 q8.5 7 17 0" stroke="#3B332E" stroke-width="3.2" fill="none" stroke-linecap="round"/>
+</svg>`;
+
+export const SAMPLE_DECK_HTML = `<!doctype html><html lang="zh"><head><meta charset="utf-8"><style>
+  @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Caveat:wght@600;700&family=Quicksand:wght@500;600;700&display=swap');
+  :root{--paper:#FBF3E4;--paper2:#F5E8CF;--card:#FFFBF2;--ink:#3B332E;--soft:#7A6F63;--orange:#E8915B;--orange-deep:#D2703A;--sage:#8FAE6B;}
+  *{box-sizing:border-box;}
+  .slide{position:relative;width:1280px;height:720px;overflow:hidden;background:var(--paper);color:var(--ink);
+    padding:74px 92px;font-family:'Quicksand',sans-serif;}
+  .slide::before{content:"";position:absolute;inset:0;pointer-events:none;
+    background-image:radial-gradient(#3B332E .6px,transparent .6px);background-size:22px 22px;opacity:.05;}
+  .slide>*{position:relative;}
+  h1{font-family:'Fredoka',sans-serif;font-weight:700;font-size:80px;line-height:1.04;margin:14px 0 0;letter-spacing:-.5px;}
+  h2{font-family:'Fredoka',sans-serif;font-weight:700;font-size:52px;line-height:1.12;margin:0 0 26px;}
+  .brand{display:flex;align-items:center;gap:11px;font-family:'Fredoka',sans-serif;font-weight:700;font-size:26px;color:var(--orange-deep);}
+  .brand .sp{font-size:28px;}
+  .kicker{display:inline-block;font-family:'Fredoka',sans-serif;font-weight:600;font-size:20px;color:#fff;
+    background:var(--orange);padding:6px 18px;border-radius:30px;margin-bottom:20px;}
+  .sub{font-size:30px;color:var(--soft);margin-top:20px;line-height:1.5;max-width:880px;}
+  .lead{font-size:30px;line-height:1.55;max-width:1040px;}
+  .lead b{color:var(--orange-deep);}
+  .tag{font-family:'Caveat',cursive;font-weight:700;color:var(--orange-deep);font-size:34px;}
+  .chips{display:flex;gap:14px;margin-top:30px;}
+  .chip{font-weight:700;font-size:21px;border:2.4px solid var(--ink);border-radius:40px;padding:9px 20px;background:#fff;}
+  .center{height:100%;display:flex;flex-direction:column;justify-content:center;}
+  .cols{display:flex;gap:30px;margin-top:26px;}
+  .col{flex:1;}
+  .sk{border:2.6px solid var(--ink);background:var(--card);border-radius:255px 14px 225px 16px/16px 225px 18px 255px;}
+  .sk.r2{border-radius:200px 18px 210px 14px/14px 205px 16px 215px;}
+  .sk.alt{border-radius:18px 230px 16px 240px/235px 16px 245px 14px;}
+  .card{padding:26px 28px;height:100%;}
+  .card .em{font-size:40px;}
+  .card h3{font-family:'Fredoka',sans-serif;font-size:30px;margin:8px 0 8px;}
+  .card p{font-size:21px;color:var(--soft);line-height:1.5;margin:0;}
+  .badge{display:inline-flex;align-items:center;justify-content:center;width:46px;height:46px;border-radius:50%;
+    background:var(--orange);color:#fff;font-family:'Fredoka',sans-serif;font-weight:700;font-size:24px;border:2.4px solid var(--ink);}
+  .steps{display:flex;gap:18px;margin-top:34px;}
+  .step{flex:1;padding:22px;}
+  .step .n{display:inline-flex;align-items:center;justify-content:center;width:46px;height:46px;border-radius:50%;
+    background:var(--sage);color:#fff;font-family:'Fredoka',sans-serif;font-weight:700;font-size:23px;border:2.4px solid var(--ink);margin-bottom:12px;}
+  .step h4{font-family:'Fredoka',sans-serif;font-size:25px;margin:0 0 6px;}
+  .step p{font-size:18px;color:var(--soft);margin:0;line-height:1.45;}
+  .opts{font-size:31px;line-height:2;margin-top:14px;}
+  .opts .b{font-family:'Fredoka',sans-serif;font-weight:600;color:var(--orange-deep);margin-right:14px;}
+  .two{display:flex;gap:40px;align-items:center;margin-top:24px;}
+  .two .txt{flex:1.04;}
+  .two .art{flex:1;display:flex;justify-content:center;}
+  .demi{height:150px;}
+  .demi.sm{height:96px;}
+  .demi.lg{height:300px;}
+  /* 截图位：把里面整块换成 <img class="shot"> 即可（替换说明见每页注释） */
+  .shot{width:440px;height:300px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:var(--paper2);border:3px dashed var(--orange-deep);color:#9A8C7C;
+    border-radius:200px 18px 210px 14px/14px 205px 16px 215px;}
+  .shot .ic{font-size:46px;}
+  .shot .cap{font-family:'Fredoka',sans-serif;font-size:21px;font-weight:600;color:#8A7C6E;margin-top:8px;}
+  .btn{display:inline-flex;align-items:center;gap:10px;font-family:'Fredoka',sans-serif;font-weight:600;font-size:26px;
+    background:var(--orange);color:#fff;border:2.6px solid var(--ink);padding:16px 34px;border-radius:140px 12px 150px 14px/14px 150px 12px 140px;box-shadow:4px 5px 0 var(--ink);margin-top:30px;}
+  .foot{position:absolute;left:92px;bottom:44px;font-family:'Caveat',cursive;font-size:28px;color:#A99B8C;}
+  /* 播放界面小样 */
+  .mock{width:430px;height:300px;padding:18px;display:flex;flex-direction:column;position:relative;}
+  .mock .scr{flex:1;border:2.2px solid var(--ink);border-radius:12px;background:#fff;padding:16px;}
+  .mock .ln{height:13px;border-radius:8px;background:var(--paper2);margin-bottom:10px;}
+  .mbars{display:flex;gap:12px;align-items:flex-end;height:90px;margin-top:14px;}
+  .mbars b{flex:1;background:#F3C8A6;border-radius:6px 6px 0 0;}
+  .mbars b.hot{background:var(--orange);}
+  .mock .demi{position:absolute;right:14px;bottom:62px;height:104px;}
+  .msub{margin-top:12px;background:var(--ink);color:#fff;font-size:16px;padding:7px 14px;border-radius:16px;width:max-content;}
+  /* 网站小样 */
+  .web{width:430px;height:300px;padding:0;overflow:hidden;display:flex;flex-direction:column;position:relative;}
+  .web .bar{display:flex;gap:7px;padding:12px 14px;border-bottom:2.2px solid var(--ink);background:#fff;}
+  .web .bar s{width:13px;height:13px;border-radius:50%;background:var(--paper2);}
+  .web .body{flex:1;padding:18px;display:flex;flex-direction:column;gap:12px;}
+  .web .sec{height:42px;border:2px solid var(--ink);border-radius:10px;background:#fff;}
+  .web .sec.hl{background:var(--paper2);border-color:var(--orange-deep);border-style:dashed;}
+  .web .demi{position:absolute;right:12px;bottom:84px;height:92px;}
 </style></head><body>
-<section class="slide dark">
-  <div class="brand"><span class="dot"></span>NORTHWIND</div>
-  <h1>Q3 Review</h1>
-  <p class="sub">Where we are, and where we're going.</p>
-</section>
+
 <section class="slide">
-  <div class="kicker">Growth</div>
-  <h2>We doubled active users in one quarter</h2>
-  <div class="row">
-    <div class="bars"><div class="bar" style="height:38%"></div><div class="bar" style="height:52%"></div><div class="bar" style="height:70%"></div><div class="bar hot" style="height:100%"></div></div>
-    <div class="stat"><div class="big">2.1×</div><div class="note">monthly active users, Jun → Sep</div></div>
+  <div class="two" style="height:100%;margin:0">
+    <div class="txt center" style="height:auto">
+      <div class="brand"><span class="sp">✦</span> Demi</div>
+      <h1>不用出镜的<br>AI 演示助手</h1>
+      <p class="sub">选一个讲解搭子，传上你的内容，她替你写稿、开口讲解——你不用露脸，也不用紧张。</p>
+      <div class="chips"><span class="chip">AI 写稿</span><span class="chip">自然语音</span><span class="chip">不用露脸</span></div>
+    </div>
+    <div class="art">${DEMI_FIGURE.replace('class="demi"', 'class="demi lg"')}</div>
   </div>
 </section>
+
 <section class="slide">
-  <div class="kicker">What's next · Q4</div>
-  <h2>Three things we're shipping</h2>
-  <div class="item"><div class="num">01</div><div><div class="it-t">Team workspaces</div><div class="it-d">让团队共用一个演示空间</div></div></div>
-  <div class="item"><div class="num">02</div><div><div class="it-t">Voice library</div><div class="it-d">更多语气与音色可选</div></div></div>
-  <div class="item"><div class="num">03</div><div><div class="it-t">Live Q&amp;A</div><div class="it-d">现场答观众提问</div></div></div>
+  <div class="kicker">为什么需要 Demi</div>
+  <h2>内容做好了，却卡在“开口讲”这一步</h2>
+  <div class="cols">
+    <div class="col sk card"><div class="em">😶</div><h3>不想出镜</h3><p>录视频要露脸、要打光，还得重来好多遍。</p></div>
+    <div class="col sk card r2"><div class="em">😵</div><h3>讲不顺</h3><p>对着 PPT，不知道每页该说什么、怎么承接。</p></div>
+    <div class="col sk card alt"><div class="em">🔁</div><h3>改一次重录一次</h3><p>内容一改，整段讲解就得从头再来。</p></div>
+  </div>
+  <p class="lead" style="margin-top:30px">这些，交给一个<b>会写稿、会开口</b>的小人就好。</p>
 </section>
+
+<section class="slide">
+  <div class="kicker">一句话介绍</div>
+  <h2>我是你的 AI 讲解员</h2>
+  <p class="lead">你给内容，我<b>自动写讲稿、用自然语音讲出来</b>，还配上动作和字幕。用法有两种：</p>
+  <div class="cols">
+    <div class="col sk card"><div class="badge">1</div><h3>上传 PPT 帮你讲</h3><p>传一份 HTML 幻灯片，逐页生成讲稿、点一次自动连播。</p></div>
+    <div class="col sk card r2"><div class="badge">2</div><h3>嵌入网站帮你讲</h3><p>一段代码贴进你的网站，我走到每个区块旁边讲解。</p></div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">玩法一</div>
+  <h2>上传 PPT，帮你逐页讲</h2>
+  <div class="two">
+    <div class="txt"><p class="lead">把 HTML 幻灯片拖进来，我自动认出每一页，写好口播稿，再用自然语音<b>逐页朗读、自动翻页</b>。角落、舞台、画中画三种布局随你切。</p>
+      <div class="tag">↓ 大概就长这样</div></div>
+    <div class="art"><div class="shot"><div class="ic">📷</div><div class="cap">放这里：上传后的播放界面截图</div>
+      <!-- 把上面这个 <div class="shot">…</div> 整块换成：<img src="你的截图.png" class="shot" style="object-fit:cover"> --></div></div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">玩法二</div>
+  <h2>嵌进你的网站，带着访客逛</h2>
+  <div class="two">
+    <div class="txt"><p class="lead">写好导览词、复制一段代码贴到你的网站，我就<b>走到每个区块旁边指着讲</b>，还能加速、暂停、上一站下一站，像个真人导览。</p>
+      <div class="tag">↓ 我会走过去讲</div></div>
+    <div class="art"><div class="shot"><div class="ic">📷</div><div class="cap">放这里：小人在网站上讲解的截图</div>
+      <!-- 把上面这个 <div class="shot">…</div> 整块换成：<img src="你的截图.png" class="shot" style="object-fit:cover"> --></div></div>
+  </div>
+</section>
+
+<section class="slide">
+  <div class="kicker">它怎么工作</div>
+  <h2>四步，从内容到“开口讲”</h2>
+  <div class="steps">
+    <div class="step sk"><div class="n">1</div><h4>选形态</h4><p>从素材库挑一个出场小人。</p></div>
+    <div class="step sk r2"><div class="n">2</div><h4>给内容</h4><p>上传 HTML，或填导览词嵌入。</p></div>
+    <div class="step sk alt"><div class="n">3</div><h4>AI 写稿</h4><p>逐页生成口播讲稿。</p></div>
+    <div class="step sk r2"><div class="n">4</div><h4>开口讲</h4><p>自然语音 + 动效，自动连播。</p></div>
+  </div>
+  <p class="lead" style="margin-top:36px">全程<b>不用出镜、不用录音</b>，内容改了，重新生成就好。</p>
+</section>
+
+<section class="slide">
+  <div class="center">
+    <div class="brand"><span class="sp">✦</span> Demi</div>
+    <h1 style="margin-top:18px">现在，<br>让我替你讲</h1>
+    <p class="sub">选个形象，传上内容，剩下的交给我。</p>
+    <div><span class="btn">选个形象，开始 →</span></div>
+  </div>
+  <div class="foot">不用出镜，也能讲得很好 ~</div>
+</section>
+
 </body></html>`;
+
+// 内置示例稿配套讲稿：第一人称、口语化，逐页讲清楚。点示例稿即用，不必等 GLM 生成。
+export const SAMPLE_SCRIPTS = [
+  { page: 1, line: "大家好，我是 Demi！我是一个不用你出镜的 AI 演示助手。接下来这几页，就由我自己来给你讲讲，我到底能帮你做什么。" },
+  { page: 2, line: "先说说为什么会有我。很多人内容明明做好了，却卡在开口讲这一步：要么不想出镜，要么对着 PPT 不知道每页说啥，要么内容一改就得重录。这些麻烦，交给我就行。" },
+  { page: 3, line: "那我是什么呢？一句话，我是你的 AI 讲解员——你把内容给我，我自动写讲稿、用自然的声音讲出来，还会配上动作和字幕。用法有两种：上传 PPT，或者把我嵌进你的网站。" },
+  { page: 4, line: "第一种最省事：你传一份 HTML 幻灯片，我会自动认出每一页，写好口播稿，然后逐页朗读、自动翻页。角落、舞台、画中画三种布局，随你切换。" },
+  { page: 5, line: "第二种更有意思：写好导览词，复制一段代码贴到你自己的网站，我就能走到每个区块旁边，指着它讲给访客听，像个真人导览。" },
+  { page: 6, line: "整个过程就四步：选一个出场形象，把内容给我，AI 自动生成讲稿，然后我就开口连着讲。全程不用你出镜、也不用录音，内容改了重新生成就好。" },
+  { page: 7, line: "好啦，这就是我，Demi。选个形象、传上内容，剩下的交给我——不用出镜，也能讲得很好。来试试吧！" },
+];
