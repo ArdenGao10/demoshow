@@ -403,6 +403,10 @@ async function writeUsers(users) {
   await fs.writeFile(USERS_FILE, JSON.stringify(users, null, 2));
 }
 
-app.listen(PORT, () => {
-  console.log(`[demi] GLM proxy on http://localhost:${PORT}  model=${MODEL}  key=${API_KEY ? "✓" : "✗ (set ZHIPU_API_KEY in .env)"}`);
-});
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`[demi] GLM proxy on http://localhost:${PORT}  model=${MODEL}  key=${API_KEY ? "✓" : "✗ (set ZHIPU_API_KEY in .env)"}`);
+  });
+}
+
+export default app;
