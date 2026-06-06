@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>星跳兔 · 小游戏 — Demi 讲解 Demo</title>
+<style>
+  :root{ --ink:#3B332E; --paper:#FBF3E4; --orange:#E8915B; }
+  *{box-sizing:border-box;}
+  body{margin:0;font:16px/1.6 -apple-system,system-ui,"PingFang SC","Microsoft YaHei",sans-serif;
+    color:var(--ink);background:var(--paper);}
+  header{padding:16px 28px;display:flex;align-items:center;gap:14px;border-bottom:2px solid rgba(59,51,46,.12);}
+  header b{font-size:20px;color:var(--orange);}
+  .wrap{max-width:880px;margin:0 auto;padding:28px 20px 160px;}
+  section{margin:34px 0;}
+  #hero{text-align:center;padding:48px 20px;background:#fff;border:2.5px solid var(--ink);border-radius:18px;}
+  #hero h1{font-size:34px;margin:0 0 10px;}
+  #hero p{color:#7a6f64;margin:0;}
+  #play{display:block;margin:26px auto 0;padding:16px 40px;font-size:20px;font-weight:700;
+    color:#fff;background:var(--orange);border:2.5px solid var(--ink);border-radius:40px;cursor:pointer;}
+  .features{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;}
+  .card{background:#fff;border:2px solid var(--ink);border-radius:14px;padding:18px;}
+  .card h3{margin:0 0 6px;font-size:17px;}
+  .card p{margin:0;font-size:14px;color:#7a6f64;}
+  #leaderboard{background:#fff;border:2px solid var(--ink);border-radius:14px;padding:20px;}
+  #leaderboard h2{margin:0 0 12px;}
+  .row{display:flex;justify-content:space-between;padding:8px 4px;border-bottom:1px dashed #d8cdbd;}
+  h2.sec{font-size:24px;border-left:6px solid var(--orange);padding-left:12px;}
+</style>
+</head>
+<body>
+  <header><b>✦ 星跳兔</b><span style="color:#7a6f64">一款一跳上瘾的小游戏</span></header>
+  <div class="wrap">
+
+    <section id="hero">
+      <h1>星跳兔 🐰✨</h1>
+      <p>点一下就跳，踩着星星往上爬，看你能跳多高。</p>
+      <button id="play">开始游戏</button>
+    </section>
+
+    <section>
+      <h2 class="sec">怎么玩</h2>
+      <div class="features">
+        <div class="card" id="f-tap"><h3>① 轻点起跳</h3><p>点屏幕任意位置，小兔就往上蹦一格。</p></div>
+        <div class="card" id="f-star"><h3>② 踩星加分</h3><p>落在星星上连踩，分数翻倍。</p></div>
+        <div class="card" id="f-combo"><h3>③ 连跳连击</h3><p>不落空就一直连击，越跳越快。</p></div>
+      </div>
+    </section>
+
+    <section>
+      <h2 class="sec">排行榜</h2>
+      <div id="leaderboard">
+        <h2>本周高手</h2>
+        <div class="row"><span>🥇 跳跳虎</span><span>12,840</span></div>
+        <div class="row"><span>🥈 星之子</span><span>11,209</span></div>
+        <div class="row"><span>🥉 兔老板</span><span>9,977</span></div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ↓↓↓ 一行嵌入脚本 ↓↓↓ -->
+  <script src="./demi-widget.js"></script>
+  <script>
+    // 把下面每一站的 line 换成你自己的讲解文本即可。
+    window.addEventListener("load", function () {
+      DemiTour.start([
+        { selector: "#hero",   line: "大家好，我是 Demi！这就是「星跳兔」，一款点一下就跳的小游戏，先带你逛一圈。" },
+        { selector: "#play",   line: "看到这个橙色按钮了吗？点它就能直接开玩，不用注册、不用下载。" },
+        { selector: "#f-tap",  line: "玩法很简单，第一步：轻轻点屏幕，小兔子就往上蹦一格。" },
+        { selector: "#f-star", line: "第二步是踩星星，连续踩中分数会翻倍，这是冲高分的关键。" },
+        { selector: "#f-combo",line: "第三步，只要不落空就一直连击，越跳越快，手感超爽。" },
+        { selector: "#leaderboard", line: "最后看看排行榜，每周和高手们比一比，你能排第几？来挑战一下吧！" },
+      ], { auto: true, name: "Demi" });
+    });
+  </script>
+</body>
+</html>

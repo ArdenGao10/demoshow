@@ -13,6 +13,9 @@ const PORT = process.env.PORT || 8787;
 const MODEL = process.env.GLM_MODEL || "glm-4-flash";
 const API_KEY = process.env.ZHIPU_API_KEY;
 const GLM_URL = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
+const TTS_URL = "https://open.bigmodel.cn/api/paas/v4/audio/speech";
+const TTS_MODEL = process.env.ZHIPU_TTS_MODEL || "cogtts";
+const TTS_VOICE = process.env.ZHIPU_TTS_VOICE || "tongtong";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const USERS_FILE = path.join(__dirname, "data", "users.json");
 const TOKEN_SECRET = process.env.TOKEN_SECRET || "demi-local-dev-secret";
@@ -60,10 +63,13 @@ function buildSystem(presenterName) {
 讲解要求：
 - 口语、自然，像真人对着观众说话；多用短句，可用"我们""你看""其实""所以""那"这类口头衔接；
 - 不要复述标题原文、也不要把正文逐字念出来——用你自己的话把这页的重点讲清楚、讲生动；
-- 每页 1~3 句，长短随内容：信息密的页讲细一点，过渡页一句带过；
+- 每页 2~4 句、约 60~120 字（信息多的页可到 5 句），要把这页讲透，别用一句空话糊过去；
+- 关键：先点出这页的核心词/要点（一两个关键概念），再展开说清楚"它是什么、为什么重要、对观众意味着什么"，让观众听完真的明白这页在讲什么；
+- 若这页有多个要点（如列了 1)2)3)、多条特性/数据/步骤、多个名词概念），必须把它们逐个点名讲出来——例如"三大能力分别是 A、B、C"，再各补一句；绝不允许只说"它有三大能力""有几个特点"却不展开是哪几个；
+- 反例（禁止这样写）："Demi 有什么厉害的地方呢？它主要有三大能力，听我慢慢道来。"——这是空话，没有把核心词讲出来；
 - 页与页之间要自然承接（上一页的结尾顺势引到这一页），但别生硬地说"下面这一页""请看下一页"；
 - 严格紧扣给定内容，绝不编造数据、产品名、结论；正文里没有的别瞎说；
-- 第一页：用第一人称做一句温暖、有钩子的开场，并用名字自我介绍；最后一页：做一句收束或号召，给观众留个印象；
+- 第一页：用第一人称做一句温暖、有钩子的开场，并用名字自我介绍，再进入正题；最后一页：做一句收束或号召，给观众留个印象；
 - 严格贴合给定的语气风格。
 
 只输出 JSON：{"scripts":[{"page":数字(从1开始),"line":"讲解词"}, ...]}，不要任何多余文字，不要 markdown 代码块。`;
@@ -100,8 +106,136 @@ ${pages}
 }
 
 app.get("/api/health", (_req, res) => {
-  res.json({ ok: true, hasKey: !!API_KEY, model: MODEL });
+  res.json({ ok: true, hasKey: !!API_KEY, model: MODEL, ttsModel: TTS_MODEL, ttsVoice: TTS_VOICE });
 });
+
+// 文本转语音：调用智谱 cogtts，返回 wav 音频字节。
+// 任何失败都用明确的状态码告诉前端，前端会自动回退到浏览器语音，绝不卡住播放。
+app.post("/api/tts", async (req, res) => {
+  try {
+    const text = String(req.body?.text || "").trim();
+    const voice = String(req.body?.voice || "").trim() || TTS_VOICE;
+    if (!text) return res.status(400).json({ error: "缺少 text" });
+    if (!API_KEY) return res.status(503).json({ error: "未配置 ZHIPU_API_KEY" });
+
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), Number(process.env.TTS_TIMEOUT_MS) || 30000);
+    let resp;
+    try {
+      resp = await fetch(TTS_URL, {
+        method: "POST",
+        signal: ctrl.signal,
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${API_KEY}` },
+        // cogtts 单次输入有长度上限；讲稿一句话足够，仍做个保险截断。
+        body: JSON.stringify({ model: TTS_MODEL, input: text.slice(0, 1000), voice, response_format: "wav" }),
+      });
+    } catch (e) {
+      const msg = e?.name === "AbortError" ? "语音合成超时" : `语音合成网络错误：${e.message}`;
+      return res.status(504).json({ error: msg });
+    } finally {
+      clearTimeout(timer);
+    }
+
+    const ct = resp.headers.get("content-type") || "";
+    // 出错时智谱返回 JSON（如余额不足 1113）；把它原样透出，便于前端提示+回退。
+    if (!resp.ok || ct.includes("application/json")) {
+      let detail = "";
+      try { detail = await resp.text(); } catch { /* ignore */ }
+      let msg = `语音合成失败 (${resp.status})`;
+      try { msg = JSON.parse(detail)?.error?.message || msg; } catch { /* ignore */ }
+      // 余额/限流用 402，方便前端区分“需要充值”这种可恢复情况。
+      return res.status(resp.status === 429 ? 402 : 502).json({ error: msg, detail });
+    }
+
+    const buf = Buffer.from(await resp.arrayBuffer());
+    // cogtts 会在语音前固定加约 2 秒的“嘟嘟”导入音 + 句尾留白；裁掉它们，
+    // 既消除杂音，也缩短页间停顿。解析失败时回退原始音频，绝不影响可用性。
+    const trimmed = trimSilenceAndTone(buf);
+    res.setHeader("Content-Type", "audio/wav");
+    res.setHeader("Cache-Control", "no-store");
+    return res.send(trimmed);
+  } catch (err) {
+    console.error("[/api/tts]", err);
+    return res.status(500).json({ error: String(err?.message || err) });
+  }
+});
+
+// 裁掉 16-bit PCM WAV 头部的导入音/静音与尾部静音，只保留真正的语音。
+// 任何不符合预期的情况都直接返回原始 buffer（安全兜底）。
+function trimSilenceAndTone(buf) {
+  try {
+    if (buf.length < 44 || buf.toString("ascii", 0, 4) !== "RIFF" || buf.toString("ascii", 8, 12) !== "WAVE") return buf;
+    let off = 12, fmt = null, dataOff = -1, dataLen = 0;
+    while (off + 8 <= buf.length) {
+      const id = buf.toString("ascii", off, off + 4);
+      const sz = buf.readUInt32LE(off + 4);
+      if (id === "fmt ") {
+        fmt = { channels: buf.readUInt16LE(off + 10), sampleRate: buf.readUInt32LE(off + 12), bits: buf.readUInt16LE(off + 22) };
+      } else if (id === "data") {
+        dataOff = off + 8; dataLen = Math.min(sz, buf.length - dataOff); break;
+      }
+      off += 8 + sz + (sz & 1);
+    }
+    if (!fmt || dataOff < 0 || fmt.bits !== 16) return buf;
+    const { channels, sampleRate } = fmt;
+    const bytesPerFrame = 2 * channels;
+    const frames = Math.floor(dataLen / bytesPerFrame);
+    if (frames < sampleRate) return buf; // 太短就不动
+
+    const win = Math.floor(sampleRate * 0.05); // 50ms 窗
+    const rmsAt = (f) => {
+      let s = 0, c = 0;
+      for (let j = f; j < Math.min(f + win, frames); j++) { const v = buf.readInt16LE(dataOff + j * bytesPerFrame); s += v * v; c++; }
+      return c ? Math.sqrt(s / c) / 32768 : 0;
+    };
+    let peak = 0;
+    for (let f = 0; f + win < frames; f += win) peak = Math.max(peak, rmsAt(f));
+    if (peak < 0.06) return buf; // 整体过轻，别误裁
+
+    // 起点：第一处“持续 100ms 高于阈值”的窗（导入音 560Hz 能量低，会被排除）。
+    const thr = Math.max(0.05, 0.18 * peak);
+    let startF = 0;
+    for (let f = 0; f + win * 2 < frames; f += win) {
+      if (rmsAt(f) > thr && rmsAt(f + win) > thr) { startF = f; break; }
+    }
+    // 终点：最后一处高于较低阈值的窗 + 120ms 余白。
+    const tailThr = Math.max(0.02, 0.08 * peak);
+    let endF = frames;
+    for (let f = frames - win; f > startF; f -= win) {
+      if (rmsAt(f) > tailThr) { endF = Math.min(frames, f + win + Math.floor(sampleRate * 0.12)); break; }
+    }
+    // 起点回退 60ms 护一下首字辅音。
+    startF = Math.max(0, startF - Math.floor(sampleRate * 0.06));
+    // 没什么可裁就别动（避免无意义重打包）。
+    if (startF < sampleRate * 0.2 && endF > frames - sampleRate * 0.2) return buf;
+    if (endF <= startF) return buf;
+
+    const pcm = buf.subarray(dataOff + startF * bytesPerFrame, dataOff + endF * bytesPerFrame);
+    return buildWav(pcm, sampleRate, channels, 16);
+  } catch {
+    return buf;
+  }
+}
+
+function buildWav(pcm, sampleRate, channels, bits) {
+  const byteRate = (sampleRate * channels * bits) / 8;
+  const blockAlign = (channels * bits) / 8;
+  const header = Buffer.alloc(44);
+  header.write("RIFF", 0, "ascii");
+  header.writeUInt32LE(36 + pcm.length, 4);
+  header.write("WAVE", 8, "ascii");
+  header.write("fmt ", 12, "ascii");
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20); // PCM
+  header.writeUInt16LE(channels, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(byteRate, 28);
+  header.writeUInt16LE(blockAlign, 32);
+  header.writeUInt16LE(bits, 34);
+  header.write("data", 36, "ascii");
+  header.writeUInt32LE(pcm.length, 40);
+  return Buffer.concat([header, pcm]);
+}
 
 app.post("/api/generate", async (req, res) => {
   try {
@@ -131,8 +265,9 @@ app.post("/api/generate", async (req, res) => {
         },
         body: JSON.stringify({
           model: MODEL,
-          temperature: 0.8,
+          temperature: 0.6, // 调低一点，讲稿更贴正文、把要点讲全，少跑题/少空话
           top_p: 0.9,
+          max_tokens: 4096, // 讲稿变长后，给足额度避免被截断（尤其多页 deck）
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: buildSystem(presenterName) },
@@ -175,16 +310,22 @@ function parseScripts(content, count) {
     parsed = m ? JSON.parse(m[0]) : {};
   }
   let arr = Array.isArray(parsed) ? parsed : parsed.scripts || parsed.pages || [];
+  // Trust the page field only when it's a valid, non-duplicate index; everything
+  // else goes into a positional queue. This way a garbled/duplicate page number
+  // never copies one line onto several pages or leaves a silent gap.
   const byPage = new Map();
+  const loose = [];
   for (const it of arr) {
-    const page = Number(it.page ?? it.index ?? 0);
-    const line = String(it.line ?? it.text ?? it.script ?? "").trim();
-    if (line) byPage.set(page, line);
+    const line = String(it?.line ?? it?.text ?? it?.script ?? (typeof it === "string" ? it : "")).trim();
+    if (!line) continue;
+    const p = Number(it?.page ?? it?.index ?? NaN);
+    if (Number.isInteger(p) && p >= 1 && p <= count && !byPage.has(p)) byPage.set(p, line);
+    else loose.push(line);
   }
-  // normalise to one line per page in order
   const out = [];
+  let li = 0;
   for (let i = 1; i <= count; i++) {
-    out.push({ page: i, line: byPage.get(i) || arr[i - 1]?.line || "" });
+    out.push({ page: i, line: byPage.get(i) || loose[li++] || "" });
   }
   return out;
 }

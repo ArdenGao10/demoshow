@@ -3,8 +3,10 @@ import { FormGlyph } from "../lib/characters.jsx";
 import { BlackCat, GrassTuft, WoodFloor } from "../lib/demi.jsx";
 import SlideFrame from "../components/SlideFrame.jsx";
 import { cancel, loadVoices, pause, pickVoice, resume, speak } from "../lib/tts.js";
+import { fetchClip } from "../lib/voiceClip.js";
 
-const SPEEDS = [0.9, 1, 1.15];
+// 1×～2× 倍速可调；1× 为云端自然语音的原始语速。
+const SPEEDS = [1, 1.25, 1.5, 1.75, 2];
 const LAYOUT_LABELS = { corner: "角落", runway: "舞台", pip: "画中画" };
 
 export default function Play({ form, deck, scripts, layout: initialLayout, onExit }) {
@@ -13,13 +15,19 @@ export default function Play({ form, deck, scripts, layout: initialLayout, onExi
   const [chars, setChars] = useState(0);
   const [voices, setVoices] = useState([]);
   const [voiceIndex, setVoiceIndex] = useState(0);
-  const [rate, setRate] = useState(0.9);
+  const [rate, setRate] = useState(1);
   const [subtitles, setSubtitles] = useState(true);
   const [mouthOpen, setMouthOpen] = useState(false);
   const [layout, setLayout] = useState(initialLayout || "corner");
+  const [aiVoice, setAiVoice] = useState(true); // 优先用智谱云端配音，失败自动回退浏览器语音
+  const [voiceErr, setVoiceErr] = useState("");
   const autoRef = useRef(false);
   const startedPageRef = useRef(-1);
-  const line = scripts?.[page]?.line || deck?.slides[page]?.text || "";
+  const audioRef = useRef(null);        // 云端配音用的 <audio>
+  const engineRef = useRef("browser"); // 当前在播的引擎：cloud | browser
+  const reqIdRef = useRef(0);          // 作废过期的异步取声请求（翻页/切换时自增）
+  const lineAt = (i) => scripts?.[i]?.line || deck?.slides[i]?.text || "";
+  const line = lineAt(page);
   const count = deck?.slides.length || 0;
   const voice = voices[voiceIndex] || null;
 
@@ -31,40 +39,101 @@ export default function Play({ form, deck, scripts, layout: initialLayout, onExi
       setVoices(available);
       setVoiceIndex(Math.max(0, available.indexOf(preferred)));
     });
-    return cancel;
+    audioRef.current = new Audio();
+    return () => { stopAudio(); cancel(); };
   }, []);
 
-  const narrate = useCallback(() => {
-    if (!line) return;
+  const stopAudio = () => {
+    const a = audioRef.current;
+    if (!a) return;
+    a.onended = a.ontimeupdate = a.onerror = null;
+    a.pause();
+  };
+
+  // 倍速实时生效：拖动/点按改变 rate 时，正在播的云端音频立刻变速（变速不变调）。
+  useEffect(() => {
+    const a = audioRef.current;
+    if (a) { a.preservesPitch = true; a.playbackRate = rate; }
+  }, [rate]);
+
+  const narrate = useCallback(async () => {
     startedPageRef.current = page;
+    const myReq = ++reqIdRef.current;
+    // 先彻底停掉上一段（云端音频 + 浏览器语音），避免叠音/“滴滴”杂音。
+    cancel();
+    stopAudio();
+    if (!line) {
+      // 空白页：别卡住自动连播，直接跳下一页。
+      if (autoRef.current && page < count - 1) setTimeout(() => setPage((p) => p + 1), 120);
+      return;
+    }
     setPlaying(true);
     setChars(0);
-    speak(line, {
-      voice,
-      rate,
-      pitch: 1.04,
-      onBoundary: ({ charIndex }) => setChars(Math.max(1, charIndex)),
-      onEnd: () => {
-        setChars(line.length);
-        setPlaying(false);
-        if (autoRef.current && page < count - 1) {
-          setTimeout(() => setPage((p) => p + 1), 650);
-        } else if (page === count - 1) {
-          autoRef.current = false;
-        }
-      },
-    });
-  }, [line, voice, rate, page, count]);
+
+    const onEnd = () => {
+      setChars(line.length);
+      setPlaying(false);
+      if (autoRef.current && page < count - 1) {
+        setTimeout(() => setPage((p) => p + 1), 180);
+      } else if (page === count - 1) {
+        autoRef.current = false;
+      }
+    };
+    const playBrowser = () => {
+      engineRef.current = "browser";
+      speak(line, {
+        voice,
+        rate,
+        pitch: 1,
+        onBoundary: ({ charIndex }) => setChars(Math.max(1, charIndex)),
+        onEnd,
+      });
+    };
+
+    if (aiVoice) {
+      try {
+        const url = await fetchClip(line); // 已预取的页会命中缓存，几乎瞬时返回
+        if (myReq !== reqIdRef.current) return; // 期间用户已翻页/切换，丢弃这次结果
+        setVoiceErr("");
+        engineRef.current = "cloud";
+        cancel(); // 双保险：确保此刻没有浏览器语音在响
+        const a = audioRef.current;
+        a.pause();
+        a.onended = onEnd;
+        a.ontimeupdate = () => { if (a.duration) setChars(Math.round(line.length * (a.currentTime / a.duration))); };
+        // 只有真正的媒体解码错误才回退，避免换源时的伪 error 触发叠音。
+        a.onerror = () => { if (myReq === reqIdRef.current && a.error) playBrowser(); };
+        a.src = url;
+        a.preservesPitch = true;
+        a.playbackRate = rate;
+        await a.play();
+        return;
+      } catch (e) {
+        if (myReq !== reqIdRef.current) return;
+        setVoiceErr(e?.status === 402 ? "智谱语音配额不足，已用浏览器语音（充值后自动恢复）" : "AI 配音暂不可用，已用浏览器语音");
+        // 落到下面的浏览器语音兜底
+      }
+    }
+    playBrowser();
+  }, [line, voice, rate, page, count, aiVoice]);
 
   useEffect(() => {
     if (autoRef.current && startedPageRef.current !== page) {
-      const id = setTimeout(narrate, 350);
+      const id = setTimeout(narrate, 120);
       return () => clearTimeout(id);
     }
   }, [page, narrate]);
 
+  // 预取下一页的云端音频，翻页时就能立刻开口，不用等合成。
   useEffect(() => {
-    if (!playing) return;
+    if (!aiVoice || page + 1 >= count) return;
+    const next = lineAt(page + 1);
+    if (next) fetchClip(next).catch(() => {});
+  }, [page, aiVoice, count]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    // 浏览器语音没有可靠的时间轴，用定时器估算进度；云端配音改由 <audio> 的 timeupdate 驱动。
+    if (!playing || engineRef.current !== "browser") return;
     const id = setInterval(() => setChars((c) => Math.min(line.length, c + 1)), Math.max(30, 58 / rate));
     return () => clearInterval(id);
   }, [playing, line, rate]);
@@ -78,7 +147,9 @@ export default function Play({ form, deck, scripts, layout: initialLayout, onExi
 
   const go = (next) => {
     autoRef.current = false;
+    reqIdRef.current++; // 作废进行中的取声请求
     cancel();
+    stopAudio();
     setPlaying(false);
     setChars(0);
     setPage(Math.max(0, Math.min(count - 1, next)));
@@ -86,15 +157,17 @@ export default function Play({ form, deck, scripts, layout: initialLayout, onExi
 
   const toggle = () => {
     if (playing) {
-      pause();
+      if (engineRef.current === "cloud") audioRef.current?.pause();
+      else pause();
       autoRef.current = false;
       setPlaying(false);
       return;
     }
     if (chars > 0 && chars < line.length) {
       autoRef.current = true;
-      resume();
       setPlaying(true);
+      if (engineRef.current === "cloud") audioRef.current?.play().catch(() => {});
+      else resume();
       return;
     }
     if (page === count - 1 && chars >= line.length) {
@@ -110,7 +183,9 @@ export default function Play({ form, deck, scripts, layout: initialLayout, onExi
 
   const switchVoice = (e) => {
     const wasPlaying = playing;
+    reqIdRef.current++;
     cancel();
+    stopAudio();
     setPlaying(false);
     setVoiceIndex(Number(e.target.value));
     if (wasPlaying) {
@@ -124,13 +199,15 @@ export default function Play({ form, deck, scripts, layout: initialLayout, onExi
     <header style={{ height: 52, flex: "0 0 52px", display: "flex", alignItems: "center", gap: 12, padding: "0 18px", borderBottom: "2px solid rgba(59,51,46,.12)", background: "var(--paper)" }}>
       <b><span style={{ color: "var(--orange-deep)" }}>✦ Demi</span><span style={{ color: "var(--ink-soft)" }}> · {deck?.name} · {form?.name}</span></b>
       <div style={{ display: "flex", gap: 6, marginLeft: "auto" }}>{Object.entries(LAYOUT_LABELS).map(([id, label]) => <button key={id} className="chip" onClick={() => setLayout(id)} style={{ cursor: "pointer", background: layout === id ? "var(--orange-pale)" : "#fff" }}>{label}</button>)}</div>
-      <select className="field" aria-label="讲解音色" value={voiceIndex} onChange={switchVoice} style={{ width: 150, padding: "6px 10px", fontSize: 12 }}>
+      <button className="chip" onClick={() => setAiVoice((v) => !v)} title="智谱 cogtts 自然语音；关闭则用浏览器语音" style={{ cursor: "pointer", background: aiVoice ? "var(--orange-pale)" : "#fff" }}>AI配音 {aiVoice ? "开" : "关"}</button>
+      <select className="field" aria-label={aiVoice ? "回退音色" : "讲解音色"} title={aiVoice ? "AI 配音不可用时的回退音色" : "浏览器讲解音色"} value={voiceIndex} onChange={switchVoice} style={{ width: 138, padding: "6px 10px", fontSize: 12, opacity: aiVoice ? 0.6 : 1 }}>
         {voices.length ? voices.map((v, i) => <option key={`${v.name}-${i}`} value={i}>{v.name}</option>) : <option>系统中文音色</option>}
       </select>
-      <button className="btn-ghost" style={{ padding: "5px 14px", fontSize: 13 }} onClick={() => { cancel(); onExit(); }}>退出</button>
+      <button className="btn-ghost" style={{ padding: "5px 14px", fontSize: 13 }} onClick={() => { cancel(); stopAudio(); onExit(); }}>退出</button>
     </header>
     <main className="speckle" style={{ flex: 1, position: "relative", background: layout === "pip" ? "#2b2622" : "var(--paper-2)", overflow: "hidden", minHeight: 0 }}>
       <div className="chip" style={{ position: "absolute", left: 24, top: 20, zIndex: 6, background: layout === "pip" ? "rgba(255,255,255,.92)" : "#fff" }}>第 {String(page + 1).padStart(2, "0")} / {String(count).padStart(2, "0")} 页</div>
+      {voiceErr && <div className="chip" style={{ position: "absolute", right: 24, top: 20, zIndex: 6, maxWidth: 320, background: "#FBE7DE", color: "#b5651d", whiteSpace: "normal", lineHeight: 1.4 }}>{voiceErr}</div>}
 
       {/* runway: full-width wood floor behind the presenter */}
       {layout === "runway" && <WoodFloor width={1280} height={56} style={{ width: "100%", position: "absolute", left: 0, bottom: 18, zIndex: 1 }} />}
@@ -143,7 +220,7 @@ export default function Play({ form, deck, scripts, layout: initialLayout, onExi
           <SlideFrame deck={deck} slide={deck.slides[page]} />
           {layout === "pip" && subtitles && (
             <div style={{ position: "absolute", left: 0, right: 0, bottom: "5%", display: "flex", justifyContent: "center", pointerEvents: "none", zIndex: 4 }}>
-              <div style={{ maxWidth: "78%", background: "rgba(59,51,46,.9)", color: "#fff", fontSize: 15, lineHeight: 1.5, padding: "8px 18px", borderRadius: 20 }}>{line.slice(0, chars || line.length)}{playing && <span style={{ color: "var(--orange)" }}>▍</span>}</div>
+              <div style={{ maxWidth: "78%", background: "rgba(59,51,46,.9)", color: "#fff", fontSize: 15, lineHeight: 1.5, padding: "8px 18px", borderRadius: 20 }}>{line}</div>
             </div>
           )}
         </div>
@@ -153,10 +230,10 @@ export default function Play({ form, deck, scripts, layout: initialLayout, onExi
       {layout !== "pip" && subtitles && (
         layout === "runway"
           ? <div className="sketch r2" style={positions.subtitle}>
-              <span style={{ fontSize: 16.5, lineHeight: 1.45 }}><b style={{ color: "var(--orange-deep)", marginRight: 8 }}>{form?.name}:</b><span style={{ color: "var(--ink)" }}>{line.slice(0, chars || line.length)}</span>{playing && <span style={{ color: "var(--orange)" }}>▍</span>}</span>
+              <span style={{ fontSize: 16.5, lineHeight: 1.45 }}><b style={{ color: "var(--orange-deep)", marginRight: 8 }}>{form?.name}:</b><span style={{ color: "var(--ink)" }}>{line}</span></span>
               <svg width="40" height="26" style={{ position: "absolute", right: 34, bottom: -22 }} aria-hidden="true"><path d="M4 2 Q20 22 36 4" fill="var(--paper-card)" stroke="var(--ink)" strokeWidth="2.6" /></svg>
             </div>
-          : <div className="sketch r2" style={positions.subtitle}><b style={{ color: "var(--orange)", marginRight: 12 }}>{form?.name}</b><span style={{ color: "#fff", fontSize: 17, lineHeight: 1.5 }}>{line.slice(0, chars || line.length)}{playing && <span style={{ color: "var(--orange)" }}>▍</span>}</span></div>
+          : <div className="sketch r2" style={positions.subtitle}><b style={{ color: "var(--orange)", marginRight: 12 }}>{form?.name}</b><span style={{ color: "#fff", fontSize: 17, lineHeight: 1.5 }}>{line}</span></div>
       )}
 
       <PresenterStage form={form} playing={playing} mouthOpen={mouthOpen} layout={layout} style={positions.presenter} />

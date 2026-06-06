@@ -1,7 +1,8 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FormGlyph, HUMANS, PETS, CHIBI, findForm } from "../lib/characters.jsx";
 import { parseDeckHtml, SAMPLE_DECK_HTML } from "../lib/slides.js";
 import SlideFrame from "../components/SlideFrame.jsx";
+import { start as demiStart, stop as demiStop } from "../lib/demiWidget.js";
 
 const PICKS = [HUMANS[5], HUMANS[3], HUMANS[1], PETS[0], CHIBI[0]];
 const LAYOUTS = [
@@ -14,6 +15,7 @@ export default function Create({ formId, tone, layout, error, onPickForm, onPick
   const inputRef = useRef(null);
   const [deck, setDeck] = useState(null);
   const [reading, setReading] = useState(false);
+  const [mode, setMode] = useState("ppt"); // ppt | embed
   const form = findForm(formId);
 
   const loadFile = async (file) => {
@@ -33,8 +35,16 @@ export default function Create({ formId, tone, layout, error, onPickForm, onPick
     <div className="screen speckle" style={{ display: "flex", flexDirection: "column" }}>
       <header style={{ height: 60, flex: "0 0 60px", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 28px", borderBottom: "2px solid rgba(59,51,46,.12)" }}>
         <button onClick={onBack} style={linkButton}><span style={{ fontSize: 22 }}>←</span><span className="h-title">新建演示</span></button>
+        <div style={{ display: "flex", gap: 8 }}>
+          {[["ppt", "上传 PPT 帮你讲"], ["embed", "嵌入网站帮你讲"]].map(([id, label]) => (
+            <button key={id} onClick={() => { demiStop(); setMode(id); }} className="sketch r2" style={{ cursor: "pointer", padding: "8px 16px", fontWeight: 700, background: mode === id ? "var(--orange-pale)" : "#fff", borderColor: mode === id ? "var(--orange-deep)" : "var(--ink)" }}>{label}</button>
+          ))}
+        </div>
         <span className="hand" style={{ fontSize: 19, color: "var(--ink-soft)" }}>草稿已保存 ✓</span>
       </header>
+      {mode === "embed" ? (
+        <EmbedPanel form={form} formId={formId} onPickForm={onPickForm} onOpenLibrary={onOpenLibrary} />
+      ) : (
       <div style={{ flex: 1, display: "grid", gridTemplateColumns: "440px 1fr", minHeight: 0 }}>
         <aside style={{ padding: "24px 30px", overflowY: "auto", borderRight: "2px solid rgba(59,51,46,.12)" }}>
           <Step title="① 选一个形态" hint="她会用这个样子替你出场" action={<button style={textButton} onClick={onOpenLibrary}>逛素材库 →</button>}>
@@ -78,6 +88,98 @@ export default function Create({ formId, tone, layout, error, onPickForm, onPick
           </div>
           <div className="hand" style={{ marginTop: 16, fontSize: 20, color: "var(--orange-deep)" }}>由「{form?.name}」出场 · 待在角落，不挡内容</div>
         </section>
+      </div>
+      )}
+    </div>
+  );
+}
+
+// 嵌入网站模式：左侧填导览词 + 生成嵌入代码，右侧示例网站可「本页试讲」。
+const SAMPLE_SITES = [
+  { selector: "#dm-hero", hint: "首屏标题" },
+  { selector: "#dm-cta", hint: "行动按钮" },
+  { selector: "#dm-feat1", hint: "功能点一" },
+  { selector: "#dm-feat2", hint: "功能点二" },
+  { selector: "#dm-board", hint: "排行榜" },
+];
+const DEFAULT_LINES = [
+  "大家好，我是 Demi！先带你逛一圈这个网站。",
+  "看到这个按钮了吗？点它就能直接开始，不用注册。",
+  "第一个亮点在这儿——一句话就能讲清它好在哪。",
+  "这是第二个亮点，配合前面用起来更顺手。",
+  "最后看看这块，想了解更多随时点开。",
+].join("\n");
+
+function EmbedPanel({ form, formId, onPickForm, onOpenLibrary }) {
+  const [lines, setLines] = useState(DEFAULT_LINES);
+  const [copied, setCopied] = useState(false);
+  const [playing, setPlaying] = useState(false);
+
+  // 离开嵌入页面（切 Tab / 返回 / 退出）时，确保小人停下、闭嘴。
+  useEffect(() => () => demiStop(), []);
+
+  const lineArr = lines.split("\n").map((s) => s.trim()).filter(Boolean);
+  const steps = lineArr.map((line, i) => ({ selector: SAMPLE_SITES[i % SAMPLE_SITES.length].selector, line }));
+
+  const snippet = `<script src="https://your-cdn/demi-widget.js"></script>
+<script>
+  DemiTour.start([
+${lineArr.map((l, i) => `    { selector: "#换成你的元素${i + 1}", line: ${JSON.stringify(l)} },`).join("\n")}
+  ], { auto: true, name: ${JSON.stringify(form?.name || "Demi")} });
+<\/script>`;
+
+  const tryHere = () => {
+    setPlaying(true);
+    demiStart(steps, { auto: true, onDone: () => setPlaying(false) });
+  };
+  const copy = () => {
+    navigator.clipboard?.writeText(snippet).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1600); });
+  };
+
+  return (
+    <div style={{ flex: 1, display: "grid", gridTemplateColumns: "440px 1fr", minHeight: 0 }}>
+      <aside style={{ padding: "24px 30px", overflowY: "auto", borderRight: "2px solid rgba(59,51,46,.12)" }}>
+        <Step title="① 选一个形态" hint="她会用这个样子出现在你的网站上" action={<button style={textButton} onClick={onOpenLibrary}>逛素材库 →</button>}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 10 }}>
+            {PICKS.map((f) => <button key={f.id} onClick={() => onPickForm(f.id)} className="sketch" style={{ height: 78, padding: 2, cursor: "pointer", position: "relative", background: f.id === formId ? "var(--orange-pale)" : "#fff", borderColor: f.id === formId ? "var(--orange-deep)" : "var(--ink)" }}><FormGlyph form={f} height={68} />{f.id === formId && <b style={check}>✓</b>}</button>)}
+            <button className="sketch-dash" onClick={onOpenLibrary} style={{ background: "transparent", cursor: "pointer", color: "var(--ink-soft)" }}>+<br /><small>更多</small></button>
+          </div>
+        </Step>
+        <Step title="② 写好导览词" hint="一行一句，小人会一站一站走过去讲（先用示例网站试讲）">
+          <textarea value={lines} onChange={(e) => setLines(e.target.value)} rows={7} className="sketch r2" style={{ width: "100%", resize: "vertical", padding: "10px 12px", font: "14px/1.6 inherit", color: "var(--ink)", background: "#fff" }} />
+          <button className="btn-demi" disabled={!lineArr.length} onClick={tryHere} style={{ width: "100%", justifyContent: "center", marginTop: 12, opacity: lineArr.length ? 1 : .45 }}>{playing ? "▶ 试讲中…（右侧观看）" : "▶ 在示例网站里试讲一遍"}</button>
+        </Step>
+        <Step title="③ 拿到嵌入代码" hint="粘到你自己网站的 HTML 里，把 selector 换成你的真实元素即可">
+          <pre className="sketch r2" style={{ margin: 0, padding: "12px 14px", background: "#2b2622", color: "#f3e9d8", fontSize: 12, lineHeight: 1.5, overflowX: "auto", whiteSpace: "pre" }}>{snippet}</pre>
+          <button style={{ ...textButton, marginTop: 10 }} onClick={copy}>{copied ? "已复制 ✓" : "复制嵌入代码"}</button>
+        </Step>
+      </aside>
+      <section style={{ position: "relative", background: "var(--paper-2)", overflowY: "auto", padding: 30 }}>
+        <div className="hand" style={{ fontSize: 21, color: "var(--ink-soft)", marginBottom: 14 }}>示例网站预览 · 点左侧「试讲」看小人走起来 ↓</div>
+        <SampleSite />
+      </section>
+    </div>
+  );
+}
+
+// 一个假的「示例网站」，给「本页试讲」当舞台。
+function SampleSite() {
+  const card = { background: "#fff", border: "2px solid var(--ink)", borderRadius: 14, padding: 18 };
+  return (
+    <div style={{ maxWidth: 720, margin: "0 auto", display: "grid", gap: 18 }}>
+      <div id="dm-hero" style={{ ...card, textAlign: "center", padding: "40px 20px" }}>
+        <div style={{ fontSize: 30, fontWeight: 800 }}>星跳兔 🐰✨</div>
+        <div style={{ color: "#7a6f64", marginTop: 6 }}>点一下就跳，看你能跳多高</div>
+        <button id="dm-cta" style={{ marginTop: 22, padding: "14px 36px", fontSize: 18, fontWeight: 700, color: "#fff", background: "var(--orange)", border: "2.5px solid var(--ink)", borderRadius: 40, cursor: "pointer" }}>开始游戏</button>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+        <div id="dm-feat1" style={card}><b>① 轻点起跳</b><div style={{ fontSize: 13, color: "#7a6f64", marginTop: 4 }}>点屏幕，小兔往上蹦一格。</div></div>
+        <div id="dm-feat2" style={card}><b>② 踩星加分</b><div style={{ fontSize: 13, color: "#7a6f64", marginTop: 4 }}>连踩星星，分数翻倍。</div></div>
+      </div>
+      <div id="dm-board" style={card}>
+        <b>本周高手</b>
+        <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 2px", borderBottom: "1px dashed #d8cdbd" }}><span>🥇 跳跳虎</span><span>12,840</span></div>
+        <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 2px" }}><span>🥈 星之子</span><span>11,209</span></div>
       </div>
     </div>
   );
