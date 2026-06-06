@@ -18,6 +18,7 @@ export default function Play({ form, deck, scripts, layout: initialLayout, onExi
   const [rate, setRate] = useState(1);
   const [subtitles, setSubtitles] = useState(true);
   const [mouthOpen, setMouthOpen] = useState(false);
+  const [preparing, setPreparing] = useState(false); // 已点播放、正在取/合成云端语音（声音还没到位）
   const [layout, setLayout] = useState(initialLayout || "corner");
   const [aiVoice, setAiVoice] = useState(true); // 优先用智谱云端配音，失败自动回退浏览器语音
   const [voiceErr, setVoiceErr] = useState("");
@@ -67,8 +68,10 @@ export default function Play({ form, deck, scripts, layout: initialLayout, onExi
       if (autoRef.current && page < count - 1) setTimeout(() => setPage((p) => p + 1), 120);
       return;
     }
-    setPlaying(true);
     setChars(0);
+    // 注意：先别 setPlaying(true)。嘴巴动画/进度条都由 playing 驱动，
+    // 而云端音频还要 await fetchClip 合成/取声，这中间若已开口就会“嘴动+进度走、声音没到”。
+    // 改为：拿到音频、真正 play() 的那一刻才进入“说话中”。
 
     const onEnd = () => {
       setChars(line.length);
@@ -81,6 +84,8 @@ export default function Play({ form, deck, scripts, layout: initialLayout, onExi
     };
     const playBrowser = () => {
       engineRef.current = "browser";
+      setPreparing(false);
+      setPlaying(true); // 浏览器语音没有可靠的就绪事件，开口即视为说话中
       speak(line, {
         voice,
         rate,
@@ -92,6 +97,7 @@ export default function Play({ form, deck, scripts, layout: initialLayout, onExi
 
     if (aiVoice) {
       try {
+        setPreparing(true); // 取/合成期间给个“准备中”反馈，但不开口、不走进度
         const url = await fetchClip(line); // 已预取的页会命中缓存，几乎瞬时返回
         if (myReq !== reqIdRef.current) return; // 期间用户已翻页/切换，丢弃这次结果
         setVoiceErr("");
@@ -106,7 +112,10 @@ export default function Play({ form, deck, scripts, layout: initialLayout, onExi
         a.src = url;
         a.preservesPitch = true;
         a.playbackRate = rate;
-        await a.play();
+        await a.play(); // 解析即代表音频已开始出声
+        if (myReq !== reqIdRef.current) { a.pause(); return; } // 等待期间又翻页了
+        setPreparing(false);
+        setPlaying(true); // 声音真正到位，这一刻才开口 + 走进度，三者同步
         return;
       } catch (e) {
         if (myReq !== reqIdRef.current) return;
@@ -150,12 +159,21 @@ export default function Play({ form, deck, scripts, layout: initialLayout, onExi
     reqIdRef.current++; // 作废进行中的取声请求
     cancel();
     stopAudio();
+    setPreparing(false);
     setPlaying(false);
     setChars(0);
     setPage(Math.max(0, Math.min(count - 1, next)));
   };
 
   const toggle = () => {
+    // 正在取/合成云端语音：再点一次当作取消，避免重复发起。
+    if (preparing && !playing) {
+      reqIdRef.current++;
+      stopAudio();
+      autoRef.current = false;
+      setPreparing(false);
+      return;
+    }
     if (playing) {
       if (engineRef.current === "cloud") audioRef.current?.pause();
       else pause();
@@ -186,6 +204,7 @@ export default function Play({ form, deck, scripts, layout: initialLayout, onExi
     reqIdRef.current++;
     cancel();
     stopAudio();
+    setPreparing(false);
     setPlaying(false);
     setVoiceIndex(Number(e.target.value));
     if (wasPlaying) {
@@ -236,11 +255,11 @@ export default function Play({ form, deck, scripts, layout: initialLayout, onExi
           : <div className="sketch r2" style={positions.subtitle}><b style={{ color: "var(--orange)", marginRight: 12 }}>{form?.name}</b><span style={{ color: "#fff", fontSize: 17, lineHeight: 1.5 }}>{line}</span></div>
       )}
 
-      <PresenterStage form={form} playing={playing} mouthOpen={mouthOpen} layout={layout} style={positions.presenter} />
+      <PresenterStage form={form} playing={playing} preparing={preparing} mouthOpen={mouthOpen} layout={layout} style={positions.presenter} />
     </main>
     <footer style={{ height: 76, flex: "0 0 76px", display: "flex", alignItems: "center", gap: 14, padding: "0 26px", borderTop: "2.4px solid var(--ink)", background: "var(--paper-card)" }}>
       <button className="icon-btn" disabled={page === 0} onClick={() => go(page - 1)}>⏮</button>
-      <button className="icon-btn big" onClick={toggle}>{playing ? "❚❚" : "▶"}</button>
+      <button className="icon-btn big" onClick={toggle} title={preparing && !playing ? "正在准备语音，点一下可取消" : undefined}>{playing ? "❚❚" : preparing ? "···" : "▶"}</button>
       <button className="icon-btn" disabled={page === count - 1} onClick={() => go(page + 1)}>⏭</button>
       <div style={{ flex: 1, height: 12, border: "2px solid var(--ink)", borderRadius: 20, overflow: "hidden" }}><div style={{ width: `${((page + chars / Math.max(1, line.length)) / count) * 100}%`, height: "100%", background: "var(--orange)" }} /></div>
       <button className="chip" onClick={() => setSubtitles((v) => !v)} style={{ cursor: "pointer", background: subtitles ? "var(--orange-pale)" : "#fff" }}>字幕 {subtitles ? "开" : "关"}</button>
@@ -249,7 +268,7 @@ export default function Play({ form, deck, scripts, layout: initialLayout, onExi
   </div>;
 }
 
-function PresenterStage({ form, playing, mouthOpen, layout, style }) {
+function PresenterStage({ form, playing, preparing, mouthOpen, layout, style }) {
   // Animate the mouth while speaking (open/closed) instead of a frozen "wow".
   const expr = playing ? (mouthOpen ? "wow" : "happy") : "smile";
   const glyph = <FormGlyph form={form} expr={expr} className={playing ? "talk" : ""} height={layout === "pip" ? 120 : 155} />;
@@ -275,7 +294,7 @@ function PresenterStage({ form, playing, mouthOpen, layout, style }) {
   // A · 角落小台 — presenter on its own little wood platform with a grass tuft.
   return (
     <div style={style}>
-      <div className="hand" style={{ color: "var(--orange-deep)", fontSize: 18 }}>{playing ? "正在讲这一页…" : "点 ▶ 后会自动连播~"}</div>
+      <div className="hand" style={{ color: "var(--orange-deep)", fontSize: 18 }}>{playing ? "正在讲这一页…" : preparing ? "正在准备语音…" : "点 ▶ 后会自动连播~"}</div>
       <div className="sway" style={{ height: 165, display: "flex", alignItems: "flex-end", justifyContent: "center", position: "relative" }}>{glyph}<GrassTuft style={{ position: "absolute", height: 25, left: 20, bottom: 4 }} /></div>
       <WoodFloor width={220} height={38} style={{ width: 220, marginTop: -8 }} />
     </div>

@@ -202,25 +202,11 @@ export function parseDeckHtml(htmlString, fileName = "演示文稿") {
 // visible/identity value (not just display). Otherwise pages after the first
 // render blank. We keep these resets scoped to the slide-level element so the
 // slide's own inner animations/layout are untouched.
-export function slideSrcDoc(deck, slide) {
-  if (deck.fullHtml && slide.marker) {
-    const iso = `<style>
-        html,body{margin:0!important;padding:0!important;width:1280px!important;height:720px!important;overflow:hidden!important;background:#fff;}
-        /* Un-hide every wrapper between <body> and the active slide. */
-        [data-demi-ancestor]{
-          display:block!important;opacity:1!important;visibility:visible!important;
-          transform:none!important;translate:none!important;scale:none!important;rotate:none!important;
-          filter:none!important;clip-path:none!important;overflow:visible!important;
-          position:static!important;width:auto!important;height:auto!important;
-          max-width:none!important;max-height:none!important;margin:0!important;
-        }
-        /* Hard-hide every slide… */
-        [data-demi-slide-id]{display:none!important;}
-        /* Hide the deck's own stuck chrome (counter/dots/progress) — Demi's
-           overlay is the authoritative page indicator. */
-        [data-demi-chrome]{display:none!important;}
-        /* …then reveal just the current one, neutralizing all common hide tricks. */
-        [data-demi-slide-id="${slide.marker}"]{
+// Per-slide reveal CSS. This is the ONLY part that changes between pages, so
+// <SlideFrame/> injects it into an already-loaded iframe (id="demi-active")
+// instead of reloading the whole document — page switches become instant.
+export function slideIsolationCss(marker) {
+  return `[data-demi-slide-id="${marker}"]{
           display:block!important;
           position:absolute!important;
           inset:0!important;
@@ -240,8 +226,30 @@ export function slideSrcDoc(deck, slide) {
           z-index:1!important;
           pointer-events:auto!important;
           animation:none!important;
+        }`;
+}
+
+export function slideSrcDoc(deck, slide) {
+  if (deck.fullHtml && slide.marker) {
+    const iso = `<style>
+        html,body{margin:0!important;padding:0!important;width:1280px!important;height:720px!important;overflow:hidden!important;background:#fff;}
+        /* Un-hide every wrapper between <body> and the active slide. */
+        [data-demi-ancestor]{
+          display:block!important;opacity:1!important;visibility:visible!important;
+          transform:none!important;translate:none!important;scale:none!important;rotate:none!important;
+          filter:none!important;clip-path:none!important;overflow:visible!important;
+          position:static!important;width:auto!important;height:auto!important;
+          max-width:none!important;max-height:none!important;margin:0!important;
         }
-      </style>`;
+        /* Hard-hide every slide… */
+        [data-demi-slide-id]{display:none!important;}
+        /* Hide the deck's own stuck chrome (counter/dots/progress) — Demi's
+           overlay is the authoritative page indicator. */
+        [data-demi-chrome]{display:none!important;}
+      </style>
+      <!-- …then reveal just the current one. Swapped LIVE on page change by
+           <SlideFrame/> (no document reload), so keep it in its own element. -->
+      <style id="demi-active">${slideIsolationCss(slide.marker)}</style>`;
 
     // Many decks build their page counter / dots / progress at RUNTIME via their
     // own JS (e.g. document.createElement('div').className='dot'), so we can't
