@@ -3,6 +3,7 @@ import { FormGlyph, HUMANS, PETS, CHIBI, findForm } from "../lib/characters.jsx"
 import { parseDeckHtml, SAMPLE_DECK_HTML } from "../lib/slides.js";
 import SlideFrame from "../components/SlideFrame.jsx";
 import { start as demiStart, stop as demiStop } from "../lib/demiWidget.js";
+import { formFrames } from "../lib/charFrames.jsx";
 
 const PICKS = [HUMANS[5], HUMANS[3], HUMANS[1], PETS[0], CHIBI[0]];
 const LAYOUTS = [
@@ -30,6 +31,7 @@ export default function Create({ formId, tone, layout, error, onPickForm, onPick
     } finally { setReading(false); }
   };
   const useSample = () => setDeck(parseDeckHtml(SAMPLE_DECK_HTML, "northwind-demo.html"));
+  const clearDeck = () => { setDeck(null); if (inputRef.current) inputRef.current.value = ""; };
 
   return (
     <div className="screen speckle" style={{ display: "flex", flexDirection: "column" }}>
@@ -55,19 +57,22 @@ export default function Create({ formId, tone, layout, error, onPickForm, onPick
           </Step>
           <Step title="② 上传 HTML 幻灯片" hint="支持含多个 section / .slide 的 HTML">
             <input ref={inputRef} type="file" accept=".html,.htm,text/html" hidden onChange={(e) => loadFile(e.target.files?.[0])} />
-            <div className="sketch-dash" role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") inputRef.current?.click(); }} onClick={() => inputRef.current?.click()} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); loadFile(e.dataTransfer.files?.[0]); }} style={{ padding: 18, textAlign: "center", cursor: "pointer" }}>
-              <div style={{ fontSize: 26 }}>⬆</div><b>{reading ? "正在读取…" : "拖到这里，或点击上传"}</b>
-            </div>
-            <button style={{ ...textButton, marginTop: 10 }} onClick={useSample}>没有文件？使用内置示例稿 →</button>
-            {deck && (() => {
+            {!deck ? (
+              <>
+                <div className="sketch-dash" role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") inputRef.current?.click(); }} onClick={() => inputRef.current?.click()} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); loadFile(e.dataTransfer.files?.[0]); }} style={{ padding: 18, textAlign: "center", cursor: "pointer" }}>
+                  <div style={{ fontSize: 26 }}>⬆</div><b>{reading ? "正在读取…" : "拖到这里，或点击上传"}</b>
+                </div>
+                <button style={{ ...textButton, marginTop: 10 }} onClick={useSample}>没有文件？使用内置示例稿 →</button>
+              </>
+            ) : (() => {
               const m = deck.method || "";
               const how = m.startsWith("selector") ? `按 ${m.replace("selector ", "")} 切分`
                 : m.startsWith("auto-split") ? "自动切分"
                 : "整页（未识别到分页）";
               const lonely = deck.slides.length <= 1;
-              return <div className="sketch r2" style={{ padding: "10px 14px", marginTop: 12, display: "flex", justifyContent: "space-between", alignItems: "center", background: lonely ? "#FBE7DE" : undefined }}>
-                <span><b>{deck.name}</b><br /><small style={{ color: "var(--ink-soft)" }}>{deck.slides.length} 页 · {how}</small>{lonely && <><br /><small style={{ color: "#b5651d" }}>只识别到 1 页——若实为多页，建议用 section / .slide / .page 组织</small></>}</span>
-                <b style={{ color: lonely ? "#b5651d" : "var(--sage)" }}>{lonely ? "!" : "✓"}</b>
+              return <div className="sketch r2" style={{ padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, background: lonely ? "#FBE7DE" : undefined }}>
+                <span><b>{deck.name}</b><br /><small style={{ color: "var(--ink-soft)" }}>{deck.slides.length} 页 · {how} · 已上传 {lonely ? "!" : "✓"}</small>{lonely && <><br /><small style={{ color: "#b5651d" }}>只识别到 1 页——若实为多页，建议用 section / .slide / .page 组织</small></>}</span>
+                <button className="chip" onClick={clearDeck} title="删除并重新上传" style={{ cursor: "pointer", flexShrink: 0, color: "#b5651d", borderColor: "#b5651d" }}>🗑 删除</button>
               </div>;
             })()}
           </Step>
@@ -130,7 +135,7 @@ ${lineArr.map((l, i) => `    { selector: "#换成你的元素${i + 1}", line: ${
 
   const tryHere = () => {
     setPlaying(true);
-    demiStart(steps, { auto: true, onDone: () => setPlaying(false) });
+    demiStart(steps, { auto: true, frames: formFrames(form), onDone: () => setPlaying(false) });
   };
   const copy = () => {
     navigator.clipboard?.writeText(snippet).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1600); });
@@ -187,7 +192,7 @@ function SampleSite() {
 
 function PreviewPresenter({ form, layout }) {
   const style = layout === "pip"
-    ? { position: "absolute", right: 12, bottom: 12, width: 100, height: 100, borderRadius: "50%", overflow: "hidden", background: "var(--paper)", border: "3px solid var(--ink)", textAlign: "center" }
+    ? { position: "absolute", right: 12, bottom: 8, width: 110, textAlign: "center" }
     : layout === "runway"
       ? { position: "absolute", right: "50%", transform: "translateX(50%)", bottom: -72, width: 130, textAlign: "center" }
       : { position: "absolute", right: 8, bottom: 4, width: 130, textAlign: "center" };

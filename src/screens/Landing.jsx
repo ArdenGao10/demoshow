@@ -5,14 +5,14 @@ import PaletteDots from "../components/PaletteDots.jsx";
 
 const PICKS = [HUMANS[3], HUMANS[1], PETS[0], CHIBI[0], HUMANS[9]];
 
-export default function Landing({ user, onStart, onLogin, onLogout }) {
+export default function Landing({ user, onStart, onDemo, onLibrary, onLogin, onLogout }) {
   const [info, setInfo] = useState("");
   return (
     <div className="screen speckle">
       <header style={{ height: 64, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 40px" }}>
         <Brand />
         <div style={{ display: "flex", alignItems: "center", gap: 24, color: "var(--ink-soft)", fontWeight: 600 }}>
-          <button style={navButton} onClick={() => setInfo("how")}>怎么用</button><button style={navButton} onClick={onStart}>看例子</button><button style={navButton} onClick={() => setInfo("price")}>价格</button><PaletteDots compact />
+          <button style={navButton} onClick={() => setInfo("how")}>怎么用</button><button style={navButton} onClick={() => setInfo("settings")}>设置</button>
           {user ? <><span>你好，{user.name}</span><button className="btn-ghost" style={{ padding: "8px 18px" }} onClick={onLogout}>退出</button></> : <button className="btn-ghost" style={{ padding: "8px 18px" }} onClick={onLogin}>登录 / 注册</button>}
         </div>
       </header>
@@ -24,16 +24,16 @@ export default function Landing({ user, onStart, onLogin, onLogout }) {
             <svg width="300" height="20" style={{ display: "block" }}><path d="M6 12 Q150 2 292 10" stroke="var(--orange)" strokeWidth="5" fill="none" strokeLinecap="round" /></svg>
           </h1>
           <p style={{ fontSize: 22, fontWeight: 600, margin: "16px 0 8px" }}>She pitches so you don't have to.</p>
-          <p style={{ fontSize: 16, color: "var(--ink-soft)", maxWidth: 420, lineHeight: 1.65, margin: "0 0 28px" }}>
-            选一个讲解搭子，传上你的 HTML 幻灯片。她替你写讲稿、开口讲解，你不用出镜，也不用紧张。
+          <p style={{ fontSize: 16, color: "var(--ink-soft)", maxWidth: 440, lineHeight: 1.65, margin: "0 0 28px" }}>
+            选一个讲解搭子，传上你的 HTML 幻灯片——或者把她嵌进你自己的网站。她替你写讲稿、开口讲解，你不用出镜，也不用紧张。
           </p>
           <div style={{ display: "flex", gap: 16 }}>
             <button className="btn-demi" onClick={onStart}>开始制作 →</button>
-            <button className="btn-ghost" onClick={onStart}>▶ 看 Demi 怎么讲</button>
+            <button className="btn-ghost" onClick={onDemo}>▶ 看 Demi 怎么讲</button>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 30 }}>
-            <span className="hand" style={{ fontSize: 19, color: "var(--orange-deep)" }}>选一个形态出场</span>
-            {PICKS.map((form) => <button aria-label={`选择 ${form.name}`} onClick={onStart} key={form.id} style={{ width: 46, height: 46, borderRadius: "50%", overflow: "hidden", background: "#fff", border: "2.4px solid var(--ink)", display: "flex", alignItems: "flex-end", justifyContent: "center", cursor: "pointer", padding: 0 }}><FormGlyph form={form} height={60} /></button>)}
+          <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 30 }}>
+            <span className="hand" style={{ fontSize: 19, color: "var(--orange-deep)" }}>选一个形态出场 →</span>
+            {PICKS.map((form) => <button aria-label={`在素材库选择 ${form.name}`} title={`${form.name} · 去素材库挑`} onClick={onLibrary} key={form.id} className="demi-pick" style={{ background: "transparent", border: 0, padding: 0, cursor: "pointer", display: "flex", alignItems: "flex-end" }}><FormGlyph form={form} height={76} /></button>)}
           </div>
         </section>
         <section style={{ position: "relative", height: "100%" }}>
@@ -42,14 +42,24 @@ export default function Landing({ user, onStart, onLogin, onLogout }) {
             <div style={{ height: 8, width: "86%", background: "var(--paper-2)", borderRadius: 8, marginBottom: 8 }} />
             <div style={{ display: "flex", gap: 7, alignItems: "flex-end", height: 58 }}><i style={{ flex: 1, height: "45%", background: "var(--orange-pale)" }} /><i style={{ flex: 1, height: "75%", background: "var(--orange)" }} /><i style={{ flex: 1, height: "100%", background: "var(--orange-deep)" }} /></div>
           </div>
-          <div className="tag" style={{ top: 90, right: 24, transform: "rotate(-8deg)" }}>hi! 我先帮你练一遍~</div>
+          <div className="tag" style={{ top: 90, right: 24, transform: "rotate(-8deg)" }}>hi! 我来帮你讲 Demo~</div>
           <FormGlyph form={HUMANS[5]} className="sway" style={{ height: 290, position: "absolute", left: 86, bottom: 96, zIndex: 2 }} />
           <WoodFloor width={520} height={62} style={{ width: 520, position: "absolute", left: 0, bottom: 56 }} />
           <BlackCat style={{ height: 56, position: "absolute", right: 70, bottom: 70 }} />
           <GrassTuft style={{ height: 38, position: "absolute", left: 36, bottom: 92 }} />
         </section>
       </main>
-      {info && <div onClick={() => setInfo("")} style={{ position: "absolute", inset: 0, background: "#3b332e66", zIndex: 10, display: "grid", placeItems: "center" }}><div onClick={(e) => e.stopPropagation()} className="sketch" style={{ width: 480, padding: 28, position: "relative" }}><button onClick={() => setInfo("")} className="icon-btn" style={{ position: "absolute", right: 14, top: 14, width: 32, height: 32 }}>×</button>{info === "how" ? <><h2 className="h-title">三步完成演示</h2><p>1. 选择尾尾或其他形态与舞台位置。</p><p>2. 上传 HTML 幻灯片，让 AI 生成逐页讲稿。</p><p>3. 点一次播放，自动朗读并连续翻页。</p></> : <><h2 className="h-title">演示版价格</h2><p><b>本地演示：免费</b></p><p>配置自己的智谱 GLM Key 后即可使用真实 AI 讲稿生成。</p></>}<button className="btn-demi" onClick={() => { setInfo(""); onStart(); }}>开始制作 →</button></div></div>}
+      {info && <div onClick={() => setInfo("")} style={{ position: "absolute", inset: 0, background: "#3b332e66", zIndex: 10, display: "grid", placeItems: "center" }}><div onClick={(e) => e.stopPropagation()} className="sketch" style={{ width: 480, padding: 28, position: "relative" }}><button onClick={() => setInfo("")} className="icon-btn" style={{ position: "absolute", right: 14, top: 14, width: 32, height: 32 }}>×</button>{info === "how" ? <>
+        <h2 className="h-title">两种讲法，任选其一</h2>
+        <p><b>① 上传 PPT 帮你讲</b>：传上 HTML 幻灯片，AI 生成逐页讲稿，点一次播放就自动朗读、连续翻页。</p>
+        <p><b>② 嵌入网站帮你讲</b>：写好导览词、拿一段嵌入代码贴进你自己的网站，小人就能走到每个区块旁边指着讲解。</p>
+        <button className="btn-demi" onClick={() => { setInfo(""); onStart(); }}>开始制作 →</button>
+      </> : <>
+        <h2 className="h-title">设置</h2>
+        <div style={{ margin: "14px 0 8px" }}><div style={{ fontWeight: 700, marginBottom: 10 }}>主页配色</div><PaletteDots /></div>
+        <p style={{ color: "var(--ink-soft)", fontSize: 14, marginTop: 16 }}>更多偏好（嵌入网站的默认形态、配音音色等）将随制作流程逐步开放。</p>
+        <button className="btn-ghost" onClick={() => setInfo("")} style={{ marginTop: 8 }}>完成</button>
+      </>}</div></div>}
     </div>
   );
 }

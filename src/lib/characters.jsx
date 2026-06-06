@@ -482,6 +482,8 @@ export const HUMANS = [
   { id: "h11", name: "老胡", kind: "human", spec: { hair: "side", hairColor: HAIR.brown, outfit: "hoodie", accent: "#D2703A", beard: true, pose: "hip" } },
   { id: "h12", name: "金妮", kind: "human", spec: { hair: "long", hairColor: HAIR.blonde, outfit: "dress", accent: "#7FA0C0", lashes: true, expr: "wink", pose: "wave" } },
 ];
+// 全局默认出场形象：尾尾
+export const DEFAULT_FORM_ID = "h6";
 export const PETS = [
   { id: "p1", name: "喵喵", kind: "pet", animal: "cat", accent: "#E8915B" },
   { id: "p2", name: "汪汪", kind: "pet", animal: "dog", accent: "#C98A4E" },

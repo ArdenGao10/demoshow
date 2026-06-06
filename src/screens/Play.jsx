@@ -265,10 +265,10 @@ function PresenterStage({ form, playing, mouthOpen, layout, style }) {
     </>
   );
 
-  // B · 通栏地面 — presenter stands directly on the shared full-width floor.
+  // B · 通栏地面 — presenter paces slowly back and forth on the shared floor while talking.
   if (layout === "runway") return (
     <div style={style}>
-      <div className="sway" style={{ height: 152, display: "flex", alignItems: "flex-end", justifyContent: "center", position: "relative" }}>{glyph}</div>
+      <div className={playing ? "demi-pace" : "sway"} style={{ height: 152, display: "flex", alignItems: "flex-end", justifyContent: "center", position: "relative" }}>{glyph}</div>
     </div>
   );
 
@@ -293,7 +293,7 @@ function layoutStyles(layout) {
   if (layout === "pip") return {
     slide: { position: "absolute", left: "50%", top: "50%", transform: "translate(-50%,-50%)", width: "min(86%, 1000px)", background: "#fff", boxShadow: "0 14px 40px rgba(0,0,0,.35)", borderRadius: 8, overflow: "hidden" },
     subtitle: null, // pip 字幕渲染在幻灯片内部（见 main）
-    presenter: { position: "absolute", right: 46, bottom: 26, width: 138, height: 138, borderRadius: "50%", background: "var(--paper)", border: "3px solid var(--ink)", boxShadow: "0 8px 22px rgba(0,0,0,.3)", display: "flex", alignItems: "flex-end", justifyContent: "center", overflow: "hidden", zIndex: 4 },
+    presenter: { position: "absolute", right: 46, bottom: 22, width: 150, display: "flex", alignItems: "flex-end", justifyContent: "center", zIndex: 4 },
   };
   // A · 角落小台：幻灯片偏左，角色在右下角小台上，字幕深色条。
   return {

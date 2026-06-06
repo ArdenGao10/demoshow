@@ -29,9 +29,9 @@
       #demi-char.flip.walking #demi-svg{animation:demiBobFlip .32s linear infinite;}
       @keyframes demiBob{0%,100%{transform:translateY(0) rotate(-1.5deg)}50%{transform:translateY(-4px) rotate(1.5deg)}}
       @keyframes demiBobFlip{0%,100%{transform:scaleX(-1) translateY(0) rotate(1.5deg)}50%{transform:scaleX(-1) translateY(-4px) rotate(-1.5deg)}}
-      #demi-bubble{max-width:260px;margin-bottom:6px;background:#3B332E;color:#fff;
-        font:14px/1.55 -apple-system,system-ui,"PingFang SC","Microsoft YaHei",sans-serif;
-        padding:9px 14px;border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.25);
+      #demi-bubble{max-width:min(78vw,560px);width:max-content;margin-bottom:6px;background:#3B332E;color:#fff;
+        font:14px/1.5 -apple-system,system-ui,"PingFang SC","Microsoft YaHei",sans-serif;
+        padding:8px 16px;border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.25);text-align:center;
         opacity:0;transform:translateY(6px);transition:opacity .25s,transform .25s;
         position:relative;}
       #demi-bubble.show{opacity:1;transform:translateY(0);}
@@ -50,6 +50,7 @@
         width:34px;height:34px;border-radius:50%;font-size:14px;line-height:1;
         display:flex;align-items:center;justify-content:center;}
       #demi-bar button.big{width:40px;height:40px;background:${C.accent};color:#fff;border-color:#3B332E;}
+      #demi-bar button.rate{width:auto;padding:0 12px;border-radius:18px;font-weight:700;}
       #demi-bar button:disabled{opacity:.35;cursor:default;}
       #demi-bar .step{min-width:42px;text-align:center;font-weight:600;}
     `;
@@ -124,8 +125,9 @@
   }
 
   // ---- 状态 ----
-  let charEl, bubbleEl, ringEl, svgWrap, barEl, stepLabel, btnPlay;
-  let steps = [], idx = -1, auto = false, mouthTimer = null, name = "Demi";
+  const SPEEDS = [1, 1.25, 1.5, 1.75, 2]; // 倍速可选
+  let charEl, bubbleEl, ringEl, svgWrap, barEl, stepLabel, btnPlay, btnRate;
+  let steps = [], idx = -1, auto = false, mouthTimer = null, name = "Demi", rate = 1.25;
 
   function buildDom() {
     injectOnce();
@@ -150,14 +152,22 @@
       <button id="demi-play" class="big" title="播放/暂停">▶</button>
       <button id="demi-next" title="下一站">▶</button>
       <span class="step" id="demi-step">0/0</span>
+      <button id="demi-rate" class="rate" title="讲解倍速">${rate}×</button>
       <button id="demi-close" title="结束">✕</button>`;
     document.body.appendChild(barEl);
     stepLabel = barEl.querySelector("#demi-step");
     btnPlay = barEl.querySelector("#demi-play");
+    btnRate = barEl.querySelector("#demi-rate");
     barEl.querySelector("#demi-prev").onclick = () => { auto = false; go(idx - 1); };
     barEl.querySelector("#demi-next").onclick = () => { auto = false; go(idx + 1); };
     barEl.querySelector("#demi-close").onclick = stop;
     btnPlay.onclick = togglePlay;
+    btnRate.onclick = cycleRate;
+  }
+
+  function cycleRate() {
+    rate = SPEEDS[(SPEEDS.indexOf(rate) + 1) % SPEEDS.length];
+    if (btnRate) btnRate.textContent = `${rate}×`;
   }
 
   function setPose(pose, expr) { svgWrap.innerHTML = svg(pose, expr); }
@@ -172,12 +182,12 @@
   function speak(text, onend) {
     try { speechSynthesis.cancel(); } catch (e) {}
     const u = new SpeechSynthesisUtterance(text);
-    u.lang = "zh-CN"; u.rate = 1; u.pitch = 1;
+    u.lang = "zh-CN"; u.rate = rate; u.pitch = 1; // 倍速：讲得快一点
     if (voice) u.voice = voice;
     let done = false;
     const finish = () => { if (done) return; done = true; stopMouth(); setPose("point", "smile"); onend && onend(); };
+    u.onstart = () => startMouth(); // 声音起来才张嘴 → 音画同步
     u.onend = finish; u.onerror = finish;
-    startMouth();
     speechSynthesis.speak(u);
   }
 
@@ -260,6 +270,7 @@
       steps = Array.isArray(tourSteps) ? tourSteps : [];
       auto = opts.auto !== false;
       name = opts.name || "Demi";
+      if (opts.rate && SPEEDS.includes(opts.rate)) rate = opts.rate;
       if (opts.accent) C.accent = opts.accent;
       loadVoice();
       if (charEl) stop();

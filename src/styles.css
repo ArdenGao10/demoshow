@@ -166,3 +166,15 @@ button:focus-visible,input:focus-visible{ outline:3px solid var(--orange); outli
   --orange:#D2703A; --orange-deep:#AE4F22; --orange-pale:#F0C9AC;
   --wood:#CC9266; --wood-deep:#A56A41; --sage:#8B9A66;
 }
+
+/* 主页「选一个形态出场」的小人：去掉圆圈，悬停轻微抬起 */
+.demi-pick { transition: transform .16s ease; }
+.demi-pick:hover { transform: translateY(-5px) rotate(-2deg); }
+
+/* 舞台讲解：讲话时小人在台上慢慢来回踱步（走得慢一点，别太快） */
+@keyframes demiPace {
+  0%   { transform: translateX(-60px) rotate(-2deg); }
+  50%  { transform: translateX(60px)  rotate(2deg); }
+  100% { transform: translateX(-60px) rotate(-2deg); }
+}
+.demi-pace { animation: demiPace 9s ease-in-out infinite; transform-origin: bottom center; }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { SketchDefs } from "./lib/demi.jsx";
-import { findForm } from "./lib/characters.jsx";
+import { findForm, DEFAULT_FORM_ID } from "./lib/characters.jsx";
 import { generateScripts } from "./lib/glm.js";
 import Landing from "./screens/Landing.jsx";
 import Login from "./screens/Login.jsx";
@@ -8,12 +8,14 @@ import Create from "./screens/Create.jsx";
 import Library from "./screens/Library.jsx";
 import Loading from "./screens/Loading.jsx";
 import Play from "./screens/Play.jsx";
+import Demo from "./screens/Demo.jsx";
 
 // Top-level state machine for the main line:
 //   选 Demi → 上传内容 → GLM 生成讲稿 → 逐页语音+动效播放
 export default function App() {
-  const [route, setRoute] = useState("landing"); // landing|login|create|library|loading|play
-  const [formId, setFormId] = useState("h6"); // 尾尾
+  const [route, setRoute] = useState("landing"); // landing|login|create|library|loading|play|demo
+  const [libFrom, setLibFrom] = useState("create"); // 素材库从哪进来的，决定返回去哪
+  const [formId, setFormId] = useState(DEFAULT_FORM_ID); // 伟伟
   const [tone, setTone] = useState("轻松亲切");
   const [layout, setLayout] = useState("corner"); // corner|runway|pip
   const [deck, setDeck] = useState(null); // parsed HTML deck
@@ -62,7 +64,8 @@ export default function App() {
   return (
     <>
       <SketchDefs />
-      {route === "landing" && <Landing user={user} onStart={() => go(user ? "create" : "login")} onLogin={() => go("login")} onLogout={() => { localStorage.removeItem("demi_token"); setUser(null); }} />}
+      {route === "landing" && <Landing user={user} onStart={() => go(user ? "create" : "login")} onDemo={() => go("demo")} onLibrary={() => { setLibFrom("landing"); go("library"); }} onLogin={() => go("login")} onLogout={() => { localStorage.removeItem("demi_token"); setUser(null); }} />}
+      {route === "demo" && <Demo onBack={() => go("landing")} onStart={() => go(user ? "create" : "login")} />}
       {route === "login" && <Login onAuth={(nextUser) => { setUser(nextUser); go("create"); }} onBack={() => go("landing")} />}
       {route === "create" && (
         <Create
@@ -73,7 +76,7 @@ export default function App() {
           onPickForm={setFormId}
           onPickTone={setTone}
           onPickLayout={setLayout}
-          onOpenLibrary={() => go("library")}
+          onOpenLibrary={() => { setLibFrom("create"); go("library"); }}
           onGenerate={handleGenerate}
           onBack={() => go("landing")}
         />
@@ -85,7 +88,7 @@ export default function App() {
             setFormId(id);
             go("create");
           }}
-          onBack={() => go("create")}
+          onBack={() => go(libFrom)}
         />
       )}
       {route === "loading" && <Loading form={form} deck={deck} />}
