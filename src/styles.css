@@ -217,6 +217,58 @@ button:focus-visible,input:focus-visible{ outline:3px solid var(--orange); outli
   animation: drawerSlideIn .32s cubic-bezier(.2,.7,.2,1.02);
 }
 
+/* 素材库小动作 —— 点角色卡片时,每个角色按 id 哈希到一个性格档案。 */
+@keyframes char-jump {
+  0%, 100% { transform: translateY(0) scaleY(1); }
+  20%      { transform: translateY(-2px) scale(1.05, .92); }
+  50%      { transform: translateY(-22px) scale(.94, 1.08); }
+  80%      { transform: translateY(-2px) scale(1.05, .94); }
+}
+@keyframes char-spin {
+  from { transform: rotate(0deg); } to { transform: rotate(360deg); }
+}
+@keyframes char-wiggle {
+  0%, 100% { transform: rotate(0); }
+  20%      { transform: rotate(-12deg); }
+  40%      { transform: rotate(10deg); }
+  60%      { transform: rotate(-8deg); }
+  80%      { transform: rotate(6deg); }
+}
+@keyframes char-wave {
+  0%, 100% { transform: rotate(-2deg) translateY(0); }
+  40%      { transform: rotate(8deg) translateY(-6px); }
+  70%      { transform: rotate(-6deg) translateY(-2px); }
+}
+@keyframes char-shimmy {
+  0%, 100% { transform: translateX(0) rotate(0); }
+  25%      { transform: translateX(-8px) rotate(-4deg); }
+  50%      { transform: translateX(0) rotate(0); }
+  75%      { transform: translateX(8px) rotate(4deg); }
+}
+.char-react-jump   { animation: char-jump   .7s ease-in-out; transform-origin: bottom center; }
+.char-react-spin   { animation: char-spin   .8s linear;        transform-origin: center 70%; }
+.char-react-wiggle { animation: char-wiggle .6s ease-in-out;   transform-origin: bottom center; }
+.char-react-wave   { animation: char-wave   .8s ease-in-out;   transform-origin: bottom center; }
+.char-react-shimmy { animation: char-shimmy .7s ease-in-out;   transform-origin: bottom center; }
+
+/* 跳舞派对 —— "乱跑"按钮按下后,所有卡片按 .15s 错峰起跳。 */
+@keyframes char-party {
+  0%, 100% { transform: translateY(0) rotate(-3deg); }
+  25%      { transform: translateY(-10px) rotate(4deg); }
+  50%      { transform: translateY(0) rotate(-3deg); }
+  75%      { transform: translateY(-10px) rotate(4deg); }
+}
+.char-party { animation: char-party .9s ease-in-out infinite; transform-origin: bottom center; }
+
+/* 跟随鼠标的小宠物 —— 用 left/top 控制目标位置,CSS 过渡让它"懒洋洋"地追上。 */
+.lib-pet {
+  position: absolute; pointer-events: none; z-index: 3;
+  transition: left .45s cubic-bezier(.3,.6,.3,1.0), top .45s cubic-bezier(.3,.6,.3,1.0);
+  will-change: left, top;
+}
+@keyframes pet-bob { 0%, 100% { transform: translate(-50%, -50%) translateY(0); } 50% { transform: translate(-50%, -50%) translateY(-4px); } }
+.lib-pet > div { animation: pet-bob 1.3s ease-in-out infinite; transform-origin: center; }
+
 /* 舞台讲解：讲话时小人在台上慢慢来回踱步（走得慢一点，别太快） */
 @keyframes demiPace {
   0%   { transform: translateX(-60px) rotate(-2deg); }

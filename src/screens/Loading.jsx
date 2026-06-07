@@ -63,10 +63,46 @@ export default function Loading({ form, deck }) {
           </div>
         </div>;
       })}
-      <div style={{ height: 12, border: "2px solid var(--ink)", borderRadius: 20, overflow: "hidden", marginTop: 14 }}>
-        <div style={{ width: `${Math.round(pct * 100)}%`, height: "100%", background: "var(--orange)", transition: "width .3s ease-out" }} />
-      </div>
+      <WalkPath form={form} pct={pct} />
     </div>
     <BlackCat style={{ height: 52, position: "absolute", bottom: 46, right: 150 }} /><GrassTuft style={{ height: 32, position: "absolute", bottom: 44, left: 170 }} />
   </div>;
+}
+
+// 顶替原本的横向进度条:画一条手绘小路,小人随进度从左走到右,终点立着一面小旗。
+// 进度信息仍在,但视觉上跟上面四条小进度条不重复——它讲的是"走到了哪儿",而不是"填了多少"。
+function WalkPath({ form, pct }) {
+  // 小路在容器内的有效区间:左留 4%、右留 16%(给小旗 + 小人不超出)。
+  const left = 4 + pct * 80; // 4% → 84%
+  return (
+    <div style={{ position: "relative", height: 64, marginTop: 16 }}>
+      <svg width="100%" height="64" viewBox="0 0 400 64" preserveAspectRatio="none" style={{ position: "absolute", inset: 0 }} aria-hidden="true">
+        <g filter="url(#sketch)" strokeLinecap="round" fill="none">
+          {/* 主路:一条带轻微起伏的手绘线 */}
+          <path d="M14 44 Q90 40 170 44 T336 44" stroke="var(--ink)" strokeWidth="2.6" />
+          {/* 虚线小石子作前进刻度 */}
+          <path d="M14 44 Q90 40 170 44 T336 44" stroke="var(--ink-soft)" strokeWidth="2" strokeDasharray="3 9" opacity=".6" />
+          {/* 沿路三小撮草丛点缀 */}
+          <path d="M92 44 q-3 -7 -1 -10 q3 -1 4 4 q3 -6 6 -4 q1 5 -2 10" stroke="var(--sage)" strokeWidth="1.8" />
+          <path d="M196 44 q-3 -8 0 -11 q3 0 4 5 q3 -6 6 -4 q1 5 -2 10" stroke="var(--sage)" strokeWidth="1.8" />
+          {/* 终点:旗杆 + 三角旗,旗子用橙色填充 */}
+          <line x1="348" y1="14" x2="348" y2="50" stroke="var(--ink)" strokeWidth="2.4" />
+          <path d="M348 16 L378 22 L348 30 Z" fill="var(--orange)" stroke="var(--ink)" strokeWidth="2.4" strokeLinejoin="round" />
+        </g>
+      </svg>
+      <div
+        style={{
+          position: "absolute",
+          left: `${left}%`,
+          bottom: 20,
+          transform: "translateX(-50%)",
+          transition: "left .35s cubic-bezier(.4,.0,.4,1)",
+        }}
+      >
+        <div className="bob">
+          <FormGlyph form={form} height={48} />
+        </div>
+      </div>
+    </div>
+  );
 }
