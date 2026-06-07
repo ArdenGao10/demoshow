@@ -3,6 +3,7 @@ import { SketchDefs } from "./lib/demi.jsx";
 import { findForm, DEFAULT_FORM_ID } from "./lib/characters.jsx";
 import { generateScripts } from "./lib/glm.js";
 import { supabase, supabaseEnabled, userFromSession } from "./lib/supabase.js";
+import { stop as demiStop } from "./lib/demiWidget.js";
 import Landing from "./screens/Landing.jsx";
 import Login from "./screens/Login.jsx";
 import Create from "./screens/Create.jsx";
@@ -56,6 +57,8 @@ export default function App() {
 
   const go = useCallback((r) => {
     setError("");
+    // 任何路由切换都先停掉悬浮 demi 小人,避免它跨页继续跑、把后续页面的元素当成锚点。
+    demiStop();
     setRoute(r);
   }, []);
 
@@ -108,7 +111,7 @@ export default function App() {
   return (
     <>
       <SketchDefs />
-      {route === "landing" && <Landing user={user} onStart={() => go(user ? "create" : "login")} onDemo={() => go("demo")} onLibrary={() => { setLibFrom("landing"); setLibraryOpen(true); }} onLogin={() => go("login")} onLogout={handleLogout} />}
+      {route === "landing" && <Landing user={user} onStart={() => go(user ? "create" : "login")} onDemo={() => go("demo")} onLibrary={() => { demiStop(); setLibFrom("landing"); setLibraryOpen(true); }} onLogin={() => go("login")} onLogout={handleLogout} />}
       {route === "demo" && <Demo onBack={() => go("landing")} onStart={() => go(user ? "create" : "login")} />}
       {route === "login" && <Login onAuth={(nextUser) => { setUser(nextUser); go("landing"); }} onBack={() => go("landing")} />}
       {route === "create" && (
@@ -120,7 +123,7 @@ export default function App() {
           onPickForm={setFormId}
           onPickTone={setTone}
           onPickLayout={setLayout}
-          onOpenLibrary={() => { setLibFrom("create"); setLibraryOpen(true); }}
+          onOpenLibrary={() => { demiStop(); setLibFrom("create"); setLibraryOpen(true); }}
           onGenerate={handleGenerate}
           onBack={() => go("landing")}
         />

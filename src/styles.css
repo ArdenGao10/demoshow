@@ -138,6 +138,22 @@ button:focus-visible,input:focus-visible{ outline:3px solid var(--orange); outli
 .bob{ animation:bob 2.4s ease-in-out infinite; }
 .sway{ animation:sway 3s ease-in-out infinite; transform-origin:bottom center; }
 
+/* Loading 路上的小人 —— 比 .bob 急一点、带轻微旋转,看着像在走、不在飘 */
+@keyframes walk-step {
+  0%, 100% { transform: translateY(0) rotate(-2deg); }
+  50%      { transform: translateY(-4px) rotate(2deg); }
+}
+.walk-step { animation: walk-step .42s ease-in-out infinite; transform-origin: bottom center; }
+/* 一步完成时短促的"开心一跳"——盖住正在走的动画一会儿 */
+@keyframes walk-cheer {
+  0%   { transform: translateY(0) rotate(0); }
+  25%  { transform: translateY(-22px) rotate(-10deg); }
+  50%  { transform: translateY(-26px) rotate(10deg); }
+  75%  { transform: translateY(-10px) rotate(-4deg); }
+  100% { transform: translateY(0) rotate(0); }
+}
+.walk-cheer { animation: walk-cheer .8s cubic-bezier(.3,.6,.4,1); transform-origin: bottom center; }
+
 @keyframes spinRing{ from{ transform:rotate(0deg);} to{ transform:rotate(360deg);} }
 .loading-spinner{
   display:inline-block; width:14px; height:14px;
@@ -217,57 +233,100 @@ button:focus-visible,input:focus-visible{ outline:3px solid var(--orange); outli
   animation: drawerSlideIn .32s cubic-bezier(.2,.7,.2,1.02);
 }
 
-/* 素材库小动作 —— 点角色卡片时,每个角色按 id 哈希到一个性格档案。 */
-@keyframes char-jump {
-  0%, 100% { transform: translateY(0) scaleY(1); }
-  20%      { transform: translateY(-2px) scale(1.05, .92); }
-  50%      { transform: translateY(-22px) scale(.94, 1.08); }
-  80%      { transform: translateY(-2px) scale(1.05, .94); }
+/* 素材库小动作 —— 按角色 id 映射到一个动作,贴名字感。
+   所有 transform-origin 都在底部中心,看着像"踩在地上"跳。 */
+
+/* 兔子三连蹦:小毛豆、波波也用 */
+@keyframes char-hop3 {
+  0%, 100% { transform: translateY(0); }
+  12%      { transform: translateY(-16px); }
+  24%      { transform: translateY(0); }
+  36%      { transform: translateY(-16px); }
+  48%      { transform: translateY(0); }
+  60%      { transform: translateY(-16px); }
+  72%      { transform: translateY(0); }
 }
-@keyframes char-spin {
-  from { transform: rotate(0deg); } to { transform: rotate(360deg); }
+/* 猫咪歪头蹭:左右轻摆 + 头偏 */
+@keyframes char-catSway {
+  0%, 100% { transform: rotate(0) translateY(0); }
+  25%      { transform: rotate(-9deg) translateY(-2px); }
+  50%      { transform: rotate(0) translateY(0); }
+  75%      { transform: rotate(9deg) translateY(-2px); }
 }
-@keyframes char-wiggle {
+/* 狗狗摇尾巴:快速弹跳 + 头摆 */
+@keyframes char-dogWag {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  20%      { transform: translateY(-8px) rotate(-8deg); }
+  40%      { transform: translateY(0) rotate(8deg); }
+  60%      { transform: translateY(-8px) rotate(-8deg); }
+  80%      { transform: translateY(0) rotate(8deg); }
+}
+/* 熊/熊猫笨重晃:慢节奏左右 */
+@keyframes char-bearLumber {
+  0%, 100% { transform: rotate(-7deg); }
+  50%      { transform: rotate(7deg); }
+}
+/* 青蛙猛跳:先蹲后冲再落 */
+@keyframes char-frogLeap {
+  0%   { transform: translateY(0) scale(1, 1); }
+  15%  { transform: translateY(0) scale(1.18, .7); }   /* 蹲 */
+  45%  { transform: translateY(-32px) scale(.92, 1.1); } /* 飞 */
+  75%  { transform: translateY(0) scale(1.12, .85); }  /* 落 */
+  100% { transform: translateY(0) scale(1, 1); }
+}
+/* 老派鞠躬:博士 / 老胡 */
+@keyframes char-bow {
   0%, 100% { transform: rotate(0); }
-  20%      { transform: rotate(-12deg); }
-  40%      { transform: rotate(10deg); }
-  60%      { transform: rotate(-8deg); }
-  80%      { transform: rotate(6deg); }
+  40%      { transform: rotate(-22deg) translateY(2px); }
+  60%      { transform: rotate(-22deg) translateY(2px); }
 }
+/* 整圈转:小缎 / 团团 / Q长发 */
+@keyframes char-spin360 {
+  from { transform: rotate(0); }
+  to   { transform: rotate(360deg); }
+}
+/* 甩头:阿刺 / Q阿刺 */
+@keyframes char-headBang {
+  0%, 100% { transform: rotate(0); }
+  15%      { transform: rotate(-26deg); }
+  30%      { transform: rotate(0); }
+  45%      { transform: rotate(-26deg); }
+  60%      { transform: rotate(0); }
+  75%      { transform: rotate(-26deg); }
+}
+/* 招手 + 小跳:默认动作,其他人物全部走这套 */
 @keyframes char-wave {
-  0%, 100% { transform: rotate(-2deg) translateY(0); }
-  40%      { transform: rotate(8deg) translateY(-6px); }
+  0%, 100% { transform: rotate(-3deg) translateY(0); }
+  35%      { transform: rotate(9deg) translateY(-8px); }
   70%      { transform: rotate(-6deg) translateY(-2px); }
 }
-@keyframes char-shimmy {
-  0%, 100% { transform: translateX(0) rotate(0); }
-  25%      { transform: translateX(-8px) rotate(-4deg); }
-  50%      { transform: translateX(0) rotate(0); }
-  75%      { transform: translateX(8px) rotate(4deg); }
-}
-.char-react-jump   { animation: char-jump   .7s ease-in-out; transform-origin: bottom center; }
-.char-react-spin   { animation: char-spin   .8s linear;        transform-origin: center 70%; }
-.char-react-wiggle { animation: char-wiggle .6s ease-in-out;   transform-origin: bottom center; }
-.char-react-wave   { animation: char-wave   .8s ease-in-out;   transform-origin: bottom center; }
-.char-react-shimmy { animation: char-shimmy .7s ease-in-out;   transform-origin: bottom center; }
 
-/* 跳舞派对 —— "乱跑"按钮按下后,所有卡片按 .15s 错峰起跳。 */
-@keyframes char-party {
-  0%, 100% { transform: translateY(0) rotate(-3deg); }
-  25%      { transform: translateY(-10px) rotate(4deg); }
-  50%      { transform: translateY(0) rotate(-3deg); }
-  75%      { transform: translateY(-10px) rotate(4deg); }
-}
-.char-party { animation: char-party .9s ease-in-out infinite; transform-origin: bottom center; }
+.char-react-hop3        { animation: char-hop3        1.1s ease-in-out; transform-origin: bottom center; }
+.char-react-catSway     { animation: char-catSway     .9s  ease-in-out; transform-origin: bottom center; }
+.char-react-dogWag      { animation: char-dogWag      .9s  ease-in-out; transform-origin: bottom center; }
+.char-react-bearLumber  { animation: char-bearLumber  .9s  ease-in-out; transform-origin: bottom center; }
+.char-react-frogLeap    { animation: char-frogLeap    1.1s cubic-bezier(.3,.1,.4,1); transform-origin: bottom center; }
+.char-react-bow         { animation: char-bow         .95s ease-in-out; transform-origin: bottom center; }
+.char-react-spin360     { animation: char-spin360     .85s linear;        transform-origin: center 70%; }
+.char-react-headBang    { animation: char-headBang    .9s  ease-in-out; transform-origin: bottom center; }
+.char-react-wave        { animation: char-wave        .9s  ease-in-out; transform-origin: bottom center; }
 
-/* 跟随鼠标的小宠物 —— 用 left/top 控制目标位置,CSS 过渡让它"懒洋洋"地追上。 */
-.lib-pet {
-  position: absolute; pointer-events: none; z-index: 3;
-  transition: left .45s cubic-bezier(.3,.6,.3,1.0), top .45s cubic-bezier(.3,.6,.3,1.0);
-  will-change: left, top;
+/* 派对:从框里跳出来。带随机错峰(由内联 --party-delay 控制)。
+   关键是 lib-card 设 overflow:visible,小人才能挣脱卡片框,飞到上面去。 */
+@keyframes char-party-pop {
+  0%   { transform: translateY(0) rotate(0); }
+  20%  { transform: translateY(-46px) rotate(-12deg) scale(1.05); }
+  35%  { transform: translateY(-58px) rotate(10deg); }
+  55%  { transform: translateY(-20px) rotate(-6deg); }
+  72%  { transform: translateY(-44px) rotate(8deg); }
+  88%  { transform: translateY(-6px) rotate(0); }
+  100% { transform: translateY(0) rotate(0); }
 }
-@keyframes pet-bob { 0%, 100% { transform: translate(-50%, -50%) translateY(0); } 50% { transform: translate(-50%, -50%) translateY(-4px); } }
-.lib-pet > div { animation: pet-bob 1.3s ease-in-out infinite; transform-origin: center; }
+.char-party-pop {
+  animation: char-party-pop 1.5s cubic-bezier(.3,.6,.4,1) infinite;
+  animation-delay: var(--party-delay, 0s);
+  transform-origin: bottom center;
+}
 
 /* 舞台讲解：讲话时小人在台上慢慢来回踱步（走得慢一点，别太快） */
 @keyframes demiPace {

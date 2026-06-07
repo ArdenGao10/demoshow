@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FormGlyph } from "../lib/characters.jsx";
 import { BlackCat, GrassTuft } from "../lib/demi.jsx";
 import { Brand } from "./Landing.jsx";
@@ -63,7 +63,7 @@ export default function Loading({ form, deck }) {
           </div>
         </div>;
       })}
-      <WalkPath form={form} pct={pct} />
+      <WalkPath form={form} pct={pct} stepIndex={stepIndex} />
     </div>
     <BlackCat style={{ height: 52, position: "absolute", bottom: 46, right: 150 }} /><GrassTuft style={{ height: 32, position: "absolute", bottom: 44, left: 170 }} />
   </div>;
@@ -71,7 +71,21 @@ export default function Loading({ form, deck }) {
 
 // 顶替原本的横向进度条:画一条手绘小路,小人随进度从左走到右,终点立着一面小旗。
 // 进度信息仍在,但视觉上跟上面四条小进度条不重复——它讲的是"走到了哪儿",而不是"填了多少"。
-function WalkPath({ form, pct }) {
+// 小人用 .walk-step 急促节奏的走路动画(替代慢慢飘的 .bob),每完成一步(stepIndex 增加)
+// 切到 .walk-cheer 跳一下表示开心,800ms 后再恢复走路。
+function WalkPath({ form, pct, stepIndex }) {
+  const [cheer, setCheer] = useState(false);
+  const prevStep = useRef(stepIndex);
+  useEffect(() => {
+    if (stepIndex > prevStep.current) {
+      setCheer(true);
+      const id = setTimeout(() => setCheer(false), 820);
+      prevStep.current = stepIndex;
+      return () => clearTimeout(id);
+    }
+    prevStep.current = stepIndex;
+  }, [stepIndex]);
+
   // 小路在容器内的有效区间:左留 4%、右留 16%(给小旗 + 小人不超出)。
   const left = 4 + pct * 80; // 4% → 84%
   return (
@@ -99,7 +113,7 @@ function WalkPath({ form, pct }) {
           transition: "left .35s cubic-bezier(.4,.0,.4,1)",
         }}
       >
-        <div className="bob">
+        <div className={cheer ? "walk-cheer" : "walk-step"}>
           <FormGlyph form={form} height={48} />
         </div>
       </div>

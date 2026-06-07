@@ -339,9 +339,12 @@ export function start(tourSteps, opts = {}) {
   buildDom();
   document.addEventListener("visibilitychange", onVisibility);
   charEl.style.transform = `translate(${window.innerWidth - 130}px, ${window.innerHeight - 200}px)`;
-  // 一次性把整轮 tour 的语音都预热到缓存,后续每站到位即开口,不再等合成。
-  setTimeout(() => {
-    steps.forEach((s) => { if (s?.line) fetchClip(s.line).catch(() => {}); });
+  // 只在背景里串行预热前两站的语音,够 go() 头两步用了,后面靠每步 go() 里的 next-prefetch 续上。
+  // 之前 forEach 一次性并发整轮,cogtts 会限流 → 大部分回退到浏览器音,这就是嵌入 tour 没 AI 声的根因。
+  setTimeout(async () => {
+    for (const s of steps.slice(0, 2)) {
+      if (s?.line) { try { await fetchClip(s.line); } catch (e) {} }
+    }
   }, 150);
   if (auto) {
     if (btnPlay) btnPlay.textContent = "❚❚";
