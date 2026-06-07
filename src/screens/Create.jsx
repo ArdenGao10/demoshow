@@ -159,7 +159,6 @@ const DEFAULT_LINES = [
 
 function EmbedPanel({ form, formId, onPickForm, onOpenLibrary, readOnly = false }) {
   const [lines, setLines] = useState(DEFAULT_LINES);
-  const [copied, setCopied] = useState(false);
   const [playing, setPlaying] = useState(false);
 
   // 离开嵌入页面（切 Tab / 返回 / 退出）时，确保小人停下、闭嘴。
@@ -169,6 +168,7 @@ function EmbedPanel({ form, formId, onPickForm, onOpenLibrary, readOnly = false 
   const steps = lineArr.map((line, i) => ({ selector: SAMPLE_SITES[i % SAMPLE_SITES.length].selector, line }));
 
   const widgetUrl = (typeof window !== "undefined" ? window.location.origin : "") + "/demi-widget.js";
+  const installer = `<script src="${widgetUrl}"></script>`;
   const snippet = `<script src="${widgetUrl}"></script>
 <script>
   DemiTour.start([
@@ -181,8 +181,9 @@ ${lineArr.map((l, i) => `    { selector: "#换成你的元素${i + 1}", line: ${
     setPlaying(true);
     demiStart(steps, { auto: true, frames: formFrames(form), onDone: () => setPlaying(false) });
   };
-  const copy = () => {
-    navigator.clipboard?.writeText(snippet).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1600); });
+  const [copiedKey, setCopiedKey] = useState("");
+  const copy = (text, key) => {
+    navigator.clipboard?.writeText(text).then(() => { setCopiedKey(key); setTimeout(() => setCopiedKey(""), 1600); });
   };
 
   return (
@@ -198,9 +199,30 @@ ${lineArr.map((l, i) => `    { selector: "#换成你的元素${i + 1}", line: ${
           <textarea value={lines} onChange={(e) => setLines(e.target.value)} rows={7} className="sketch r2" style={{ width: "100%", resize: "vertical", padding: "10px 12px", font: "14px/1.6 inherit", color: "var(--ink)", background: "#fff" }} />
           <button className="btn-demi" disabled={!lineArr.length} onClick={tryHere} style={{ width: "100%", justifyContent: "center", marginTop: 12, opacity: lineArr.length ? 1 : .45 }}>{playing ? "⏹ 停止试讲" : "▶ 在示例网站里试讲一遍"}</button>
         </Step>
-        <Step title="③ 拿到嵌入代码" hint="粘到你自己网站的 HTML 里，把 selector 换成你的真实元素即可" anchor="embed-snippet">
-          <pre className="sketch r2" style={{ margin: 0, padding: "12px 14px", background: "#2b2622", color: "#f3e9d8", fontSize: 12, lineHeight: 1.5, overflowX: "auto", whiteSpace: "pre" }}>{snippet}</pre>
-          <button style={{ ...textButton, marginTop: 10 }} onClick={copy}>{copied ? "已复制 ✓" : "复制嵌入代码"}</button>
+        <Step title="③ 装到你的网站上" hint="两种用法，挑顺手的" anchor="embed-snippet">
+          <div className="sketch r2" style={{ padding: "12px 14px", background: "#fff", marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+              <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 22, height: 22, borderRadius: "50%", background: "var(--orange-deep)", color: "#fff", fontWeight: 700, fontSize: 13 }}>A</span>
+              <b style={{ fontSize: 14 }}>贴一行脚本，到自己站上点元素（推荐）</b>
+            </div>
+            <ol style={{ margin: "6px 0 10px 22px", padding: 0, fontSize: 13, color: "var(--ink-soft)", lineHeight: 1.7 }}>
+              <li>把右边这一行贴到你 HTML 的 <code>&lt;/body&gt;</code> 前</li>
+              <li>访问 <code>你的网址#demi-edit</code> 进编辑模式</li>
+              <li>鼠标点元素 → 写讲解词 → 点「复制嵌入代码」</li>
+              <li>把生成的那段贴回 HTML，发布即上线</li>
+            </ol>
+            <pre className="sketch r2" style={{ margin: 0, padding: "10px 12px", background: "#2b2622", color: "#f3e9d8", fontSize: 12, lineHeight: 1.5, overflowX: "auto", whiteSpace: "pre" }}>{installer}</pre>
+            <button style={{ ...textButton, marginTop: 8 }} onClick={() => copy(installer, "installer")}>{copiedKey === "installer" ? "已复制 ✓" : "复制安装脚本"}</button>
+          </div>
+          <details className="sketch r2" style={{ padding: "10px 14px", background: "#fff" }}>
+            <summary style={{ cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 22, height: 22, borderRadius: "50%", background: "var(--ink)", color: "#fff", fontWeight: 700, fontSize: 13 }}>B</span>
+              <b style={{ fontSize: 14 }}>或：直接拷一段「带讲稿」的代码，自己手填 selector</b>
+            </summary>
+            <div className="hand" style={{ fontSize: 16, color: "var(--ink-soft)", margin: "8px 0" }}>把每一站的 <code>#换成你的元素X</code> 换成你站点真实元素的 id 即可。</div>
+            <pre className="sketch r2" style={{ margin: 0, padding: "10px 12px", background: "#2b2622", color: "#f3e9d8", fontSize: 12, lineHeight: 1.5, overflowX: "auto", whiteSpace: "pre" }}>{snippet}</pre>
+            <button style={{ ...textButton, marginTop: 8 }} onClick={() => copy(snippet, "snippet")}>{copiedKey === "snippet" ? "已复制 ✓" : "复制完整代码"}</button>
+          </details>
         </Step>
       </aside>
       <section style={{ position: "relative", background: "var(--paper-2)", overflowY: "auto", padding: 30 }}>
