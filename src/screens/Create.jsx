@@ -13,7 +13,7 @@ const LAYOUTS = [
   ["pip", "画中画", "幻灯片最大，小人缩成圆形徽章"],
 ];
 
-export default function Create({ formId, tone, layout, error, onPickForm, onPickTone, onPickLayout, onOpenLibrary, onGenerate, onBack, readOnly = false, onStartReal }) {
+export default function Create({ formId, tone, layout, error, onPickForm, onPickTone, onPickLayout, onOpenLibrary, onGenerate, onBack, readOnly = false, onStartReal, mode: modeProp, onModeChange }) {
   const inputRef = useRef(null);
   const [deck, setDeck] = useState(() => {
     try {
@@ -23,7 +23,10 @@ export default function Create({ formId, tone, layout, error, onPickForm, onPick
   });
   const [reading, setReading] = useState(false);
   const [readErr, setReadErr] = useState("");
-  const [mode, setMode] = useState("ppt"); // ppt | embed
+  const [internalMode, setInternalMode] = useState("ppt");
+  // 父组件可受控(用于 Demo tour 切到嵌入模式);不传就走内部状态。
+  const mode = modeProp ?? internalMode;
+  const setMode = (m) => { if (onModeChange) onModeChange(m); else setInternalMode(m); };
   const form = findForm(formId);
   // readOnly:演示页用,强制把所有步骤都展开,让 Demi 能走过完整的创建流程。
   const expanded = readOnly || !!deck;
@@ -60,7 +63,7 @@ export default function Create({ formId, tone, layout, error, onPickForm, onPick
     <div className="screen speckle" style={{ display: "flex", flexDirection: "column" }}>
       <header style={{ height: 60, flex: "0 0 60px", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 28px", borderBottom: "2px solid rgba(59,51,46,.12)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-          <button onClick={onBack} style={linkButton}><span style={{ fontSize: 22 }}>←</span><span className="h-title">{readOnly ? "返回主页" : "新建演示"}</span></button>
+          <button onClick={onBack} style={linkButton}><span style={{ fontSize: 22 }}>←</span><span className="h-title">返回</span></button>
           {readOnly && <span className="chip" style={{ background: "var(--orange-pale)", borderColor: "var(--orange-deep)" }}>演示模式 · 只看不改</span>}
         </div>
         <div data-tour="mode-tabs" style={{ display: "flex", gap: 8, pointerEvents: readOnly ? "none" : undefined }}>
@@ -191,11 +194,11 @@ ${lineArr.map((l, i) => `    { selector: "#换成你的元素${i + 1}", line: ${
             <button className="sketch-dash" onClick={onOpenLibrary} style={{ background: "transparent", cursor: "pointer", color: "var(--ink-soft)" }}>+<br /><small>更多</small></button>
           </div>
         </Step>
-        <Step title="② 写好导览词" hint="一行一句，小人会一站一站走过去讲（先用示例网站试讲）">
+        <Step title="② 写好导览词" hint="一行一句，小人会一站一站走过去讲（先用示例网站试讲）" anchor="embed-lines">
           <textarea value={lines} onChange={(e) => setLines(e.target.value)} rows={7} className="sketch r2" style={{ width: "100%", resize: "vertical", padding: "10px 12px", font: "14px/1.6 inherit", color: "var(--ink)", background: "#fff" }} />
           <button className="btn-demi" disabled={!lineArr.length} onClick={tryHere} style={{ width: "100%", justifyContent: "center", marginTop: 12, opacity: lineArr.length ? 1 : .45 }}>{playing ? "⏹ 停止试讲" : "▶ 在示例网站里试讲一遍"}</button>
         </Step>
-        <Step title="③ 拿到嵌入代码" hint="粘到你自己网站的 HTML 里，把 selector 换成你的真实元素即可">
+        <Step title="③ 拿到嵌入代码" hint="粘到你自己网站的 HTML 里，把 selector 换成你的真实元素即可" anchor="embed-snippet">
           <pre className="sketch r2" style={{ margin: 0, padding: "12px 14px", background: "#2b2622", color: "#f3e9d8", fontSize: 12, lineHeight: 1.5, overflowX: "auto", whiteSpace: "pre" }}>{snippet}</pre>
           <button style={{ ...textButton, marginTop: 10 }} onClick={copy}>{copied ? "已复制 ✓" : "复制嵌入代码"}</button>
         </Step>

@@ -10,7 +10,7 @@ function injectOnce() {
   css.id = "demi-widget-style";
   css.textContent = `
     #demi-char{position:fixed;left:0;top:0;z-index:2147483600;width:96px;
-      transition:transform .9s cubic-bezier(.45,.05,.35,1);pointer-events:none;
+      transition:transform .72s cubic-bezier(.45,.05,.35,1);pointer-events:none;
       display:flex;flex-direction:column;align-items:center;}
     #demi-char.walking #demi-svg{animation:demiBob .32s linear infinite;}
     #demi-char #demi-svg{transition:transform .25s ease;transform-origin:bottom center;}
@@ -268,7 +268,7 @@ function moveTo(el, then) {
   ringEl.style.height = rect.height + 12 + "px";
   ringEl.classList.add("show");
 
-  setTimeout(() => { charEl.classList.remove("walking"); setPose("point", "smile"); then && then(); }, 950);
+  setTimeout(() => { charEl.classList.remove("walking"); setPose("point", "smile"); then && then(); }, 720);
 }
 
 function go(i) {
@@ -277,19 +277,28 @@ function go(i) {
   stepLabel.textContent = `${idx + 1}/${steps.length}`;
   bubbleEl.classList.remove("show");
   const step = steps[idx];
-  const el = document.querySelector(step.selector);
-  if (!el) { if (auto && idx < steps.length - 1) go(idx + 1); return; }
-  el.scrollIntoView({ behavior: "smooth", block: "center" });
+  // 先让调用方有机会切换页面状态(比如切 Tab),DOM 才会渲染出下一站的锚点。
+  if (step.onEnter) { try { step.onEnter(); } catch (e) {} }
+  // 走路途中顺便把下一句拿回来,到站立即开口(voiceClip 内部按 text 去重缓存)。
+  const next = steps[i + 1];
+  if (next?.line) fetchClip(next.line).catch(() => {});
+  // 给 React 一个 tick 渲染新状态(比如切到嵌入模式后,锚点才在 DOM 里)。
+  const settle = step.onEnter ? 80 : 0;
   setTimeout(() => {
-    moveTo(el, () => {
-      bubbleEl.textContent = step.line;
-      bubbleEl.classList.add("show");
-      speak(step.line, () => {
-        if (auto && idx < steps.length - 1) setTimeout(() => go(idx + 1), 350);
-        else if (idx >= steps.length - 1) { auto = false; if (btnPlay) btnPlay.textContent = "▶"; onDone && onDone(); }
+    const el = document.querySelector(step.selector);
+    if (!el) { if (auto && idx < steps.length - 1) go(idx + 1); return; }
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    setTimeout(() => {
+      moveTo(el, () => {
+        bubbleEl.textContent = step.line;
+        bubbleEl.classList.add("show");
+        speak(step.line, () => {
+          if (auto && idx < steps.length - 1) setTimeout(() => go(idx + 1), 180);
+          else if (idx >= steps.length - 1) { auto = false; if (btnPlay) btnPlay.textContent = "▶"; onDone && onDone(); }
+        });
       });
-    });
-  }, 420);
+    }, 230);
+  }, settle);
 }
 
 function pauseSpeech() {
@@ -330,6 +339,10 @@ export function start(tourSteps, opts = {}) {
   buildDom();
   document.addEventListener("visibilitychange", onVisibility);
   charEl.style.transform = `translate(${window.innerWidth - 130}px, ${window.innerHeight - 200}px)`;
+  // 一次性把整轮 tour 的语音都预热到缓存,后续每站到位即开口,不再等合成。
+  setTimeout(() => {
+    steps.forEach((s) => { if (s?.line) fetchClip(s.line).catch(() => {}); });
+  }, 150);
   if (auto) {
     if (btnPlay) btnPlay.textContent = "❚❚";
     setTimeout(() => go(0), 300);

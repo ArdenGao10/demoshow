@@ -46,6 +46,9 @@ export default function Play({ form, deck, scripts, layout: initialLayout, onExi
     return () => { stopAudio(); cancel(); };
   }, []);
 
+  // 解析完讲稿就直接开播——用户点过"生成讲解"已经是一次明确的播放意愿,不让他再点一次。
+  useEffect(() => { autoRef.current = true; }, []);
+
   // 配音错误提示 6 秒自动消失（绝大多数错误是单次抖动，没必要整场挂着）。
   useEffect(() => {
     if (!voiceErr) return;
