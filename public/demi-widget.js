@@ -14,6 +14,27 @@
   const INK = "#3B332E", PAPER = "#FBF3E4";
   const C = { accent: "#E8915B", blush: "#F3B58C", shoe: "#C9702F" };
 
+  // ---- AI 后端地址:优先看 script tag 上的 data-api-base 覆写,然后从 widget 自己的 src 推
+  //      (用户从 demoshow 域名加载 widget 时同源就直接命中),最后默认指向 demoshow 部署 URL。
+  const DEFAULT_API_BASE = "https://demoshow-alpha.vercel.app";
+  function detectApiBase() {
+    try {
+      const me = document.currentScript
+        || Array.from(document.scripts).reverse().find(s => /demi-widget(\.\w+)?\.js/.test(s.src || ""));
+      if (me) {
+        const override = me.getAttribute && me.getAttribute("data-api-base");
+        if (override) return String(override).replace(/\/$/, "");
+        if (me.src) {
+          const origin = new URL(me.src).origin;
+          // widget 自托管在用户站点上时,那个域名没有 /api,直接走默认后端
+          if (/demoshow/.test(origin) || /vercel\.app$/.test(origin)) return origin;
+        }
+      }
+    } catch (e) {}
+    return DEFAULT_API_BASE;
+  }
+  const API_BASE = detectApiBase();
+
   // ---- 一次性注入样式 + 手绘抖动滤镜 ----
   function injectOnce() {
     if (document.getElementById("demi-widget-style")) return;
@@ -444,7 +465,8 @@
       <div class="tip" id="demi-ed-tip">把鼠标移到页面上 → 点击任意元素 → 添加一站</div>
       <div id="demi-edit-list"></div>
       <div class="foot">
-        <button id="demi-ed-link" class="primary">🔗 复制讲解链接</button>
+        <button id="demi-ed-ai" class="primary">✨ AI 帮我写讲解词</button>
+        <button id="demi-ed-link">🔗 复制讲解链接</button>
         <button id="demi-ed-export">📋 高级:复制嵌入代码(访客自动播)</button>
         <pre id="demi-ed-snippet" style="display:none"></pre>
       </div>`;
@@ -458,6 +480,7 @@
     panel.querySelector("#demi-ed-preview").onclick = previewEdit;
     panel.querySelector("#demi-ed-export").onclick = exportEditSnippet;
     panel.querySelector("#demi-ed-link").onclick = exportPlayLink;
+    panel.querySelector("#demi-ed-ai").onclick = aiWriteLines;
     renderEditList();
   }
 
@@ -579,6 +602,82 @@
     tip.textContent = msg;
     tip.style.background = "#FBE7DE";
     setTimeout(() => { tip.textContent = orig; tip.style.background = origBg; }, 1800);
+  }
+
+  // 给一个元素猜个"角色",AI 用来理解这是页面上的什么
+  function describeRole(el) {
+    if (!el || el.nodeType !== 1) return "区块";
+    const t = el.tagName;
+    if (t === "BUTTON") return "按钮";
+    if (t === "A") return "链接";
+    if (/^H[1-6]$/.test(t)) return "标题";
+    if (t === "IMG") return "图片";
+    if (t === "INPUT") return el.type === "submit" ? "提交按钮" : "输入框";
+    if (t === "FORM") return "表单";
+    if (t === "NAV") return "导航栏";
+    if (t === "HEADER") return "页眉";
+    if (t === "FOOTER") return "页脚";
+    if (t === "LI") return "列表项";
+    const role = el.getAttribute && el.getAttribute("role");
+    if (role === "button") return "按钮";
+    const cls = (el.className && typeof el.className === "string" ? el.className : "").toLowerCase();
+    if (/\bcard\b/.test(cls)) return "卡片";
+    if (/\bhero\b|\bbanner\b/.test(cls)) return "首屏横幅";
+    if (/\bcta\b/.test(cls)) return "行动按钮";
+    if (/\bfeature\b/.test(cls)) return "功能介绍";
+    if (/\bnav\b|\bmenu\b/.test(cls)) return "导航";
+    return "区块";
+  }
+  // 抽元素显示的文字(不要 widget 自己注入的内容)
+  function elementText(el) {
+    if (!el) return "";
+    const t = (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim();
+    return t.slice(0, 240);
+  }
+
+  async function aiWriteLines() {
+    if (!edit) return;
+    const validIdx = edit.steps
+      .map((s, i) => ({ s, i }))
+      .filter(({ s }) => s.selector && document.querySelector(s.selector));
+    if (!validIdx.length) { flashTip("还没有可用站点(或选中的元素不存在了)"); return; }
+
+    const btn = document.getElementById("demi-ed-ai");
+    const origText = btn ? btn.textContent : "";
+    if (btn) { btn.disabled = true; btn.textContent = "✨ 正在请 AI 写…"; }
+    flashTip("AI 正在写讲解词,可能要几秒钟…");
+
+    const stops = validIdx.map(({ s }) => {
+      const el = document.querySelector(s.selector);
+      return { selector: s.selector, role: describeRole(el), text: elementText(el) };
+    });
+
+    try {
+      const resp = await fetch(API_BASE + "/api/generate-tour", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: edit.name, tone: "轻松亲切", stops }),
+      });
+      if (!resp.ok) {
+        const j = await resp.json().catch(() => ({}));
+        throw new Error(j.error || `AI 调用失败 (${resp.status})`);
+      }
+      const data = await resp.json();
+      const lines = Array.isArray(data.lines) ? data.lines : [];
+      // 只覆盖空的讲解词,已经手填过的保留
+      validIdx.forEach(({ i }, k) => {
+        const line = (lines[k] || "").trim();
+        if (!line) return;
+        if (!edit.steps[i].line || !edit.steps[i].line.trim()) edit.steps[i].line = line;
+      });
+      saveDraft();
+      renderEditList();
+      flashTip(data.warning ? `AI 写好啦(${data.warning})` : "AI 写好啦,可以再手动改改 ✓");
+    } catch (e) {
+      flashTip(`AI 写词失败:${e.message || e}`);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = origText; }
+    }
   }
 
   function exportPlayLink() {

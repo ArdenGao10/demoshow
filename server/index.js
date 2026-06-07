@@ -23,6 +23,18 @@ const TOKEN_SECRET = process.env.TOKEN_SECRET || "demi-local-dev-secret";
 const app = express();
 app.use(express.json({ limit: "4mb" }));
 
+// Widget 部署在用户自己的域名(比如 ardencosmic.com),要从那边跨域调 /api/generate-tour。
+// 只对这个端点开放跨域,其他 /api 路径保持同源。
+app.use((req, res, next) => {
+  if (req.path === "/api/generate-tour") {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    if (req.method === "OPTIONS") return res.status(204).end();
+  }
+  next();
+});
+
 app.post("/api/auth/register", async (req, res) => {
   const email = String(req.body?.email || "").trim().toLowerCase();
   const password = String(req.body?.password || "");
@@ -296,6 +308,124 @@ app.post("/api/generate", async (req, res) => {
     return res.status(500).json({ error: String(err?.message || err) });
   }
 });
+
+// 给嵌入网站的导览自动写讲解词。
+// 输入:每一站点的 selector + 元素本身的文字内容 + 角色(button/heading/...)
+// 输出:每一站一句口语化的讲解词
+function buildTourSystem(name) {
+  return `你是「${name || "Demi"}」——一个温暖、不端着的真人讲解员。
+观众正在浏览一个网页;你会拿到这一趟导览的所有站点,每一站告诉你它在页面上的角色(标题/按钮/卡片...)和它实际显示的文字。
+请为每一站写一句"开口讲出来"的中文口播词。
+
+要求:
+- 一站一句,12~40 字最佳;避免书面长句,口语化、自然
+- 第一站是开场,用名字简短自我介绍,温暖一点
+- 中间几站点出"这是什么、有什么用",但不要逐字复述按钮/卡片上的原文
+- 最后一站是收束,给一个鼓励或行动号召
+- 整段读下来要顺,前后能衔接,但不要说"下面这一站""请看下一项"这种生硬话
+- 不要编造没出现过的功能/数据,只能用我给你的内容
+
+只输出 JSON:{"lines":["第一句","第二句",...]} ,长度严格等于站点数,不要多余文字,不要 markdown 代码块。`;
+}
+
+function buildTourUserPrompt({ name, tone, stops }) {
+  const toneDesc = ({
+    轻松亲切: "轻松、亲切、像朋友介绍",
+    专业稳重: "专业、稳重,用词克制",
+    元气满满: "活力满满、热情、有感染力",
+  })[tone] || tone || "轻松亲切";
+  const listing = stops.map((s, i) =>
+    `【第 ${i + 1} 站 / 共 ${stops.length} 站】
+角色:${s.role || "未知"}
+显示文字:${(s.text || "(无)").slice(0, 240)}`
+  ).join("\n\n");
+  return `讲解人名字:${name || "Demi"}
+语气风格:${toneDesc}
+
+【站点清单(按访问顺序)】
+${listing}
+
+请为 ${stops.length} 站各写一句,按顺序输出 JSON。`;
+}
+
+app.post("/api/generate-tour", async (req, res) => {
+  try {
+    const { name, tone, stops } = req.body || {};
+    if (!Array.isArray(stops) || stops.length === 0) {
+      return res.status(400).json({ error: "缺少 stops" });
+    }
+    if (stops.length > 20) {
+      return res.status(400).json({ error: "stops 数量过多(上限 20)" });
+    }
+    if (!API_KEY) {
+      // 没配 key 也得让用户看到东西,回退到一个本地占位讲稿
+      const lines = stops.map((s, i) => {
+        const txt = String(s.text || "").trim();
+        if (i === 0) return `大家好,我是 ${name || "Demi"},先看这里:${txt.slice(0, 16) || "我们的开场"}。`;
+        if (i === stops.length - 1) return `最后看看${txt.slice(0, 14) || "这块"}——欢迎来逛一逛!`;
+        return `这块是${txt.slice(0, 18) || "我们的亮点"},简单看一下。`;
+      });
+      return res.json({ lines, model: "local-demo", warning: "未配置 ZHIPU_API_KEY,使用本地占位讲稿。" });
+    }
+
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), Number(process.env.GLM_TIMEOUT_MS) || 45000);
+    let resp;
+    try {
+      resp = await fetch(GLM_URL, {
+        method: "POST",
+        signal: ctrl.signal,
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${API_KEY}` },
+        body: JSON.stringify({
+          model: MODEL,
+          temperature: 0.7,
+          top_p: 0.9,
+          max_tokens: 1500,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: buildTourSystem(name) },
+            { role: "user", content: buildTourUserPrompt({ name, tone, stops }) },
+          ],
+        }),
+      });
+    } catch (e) {
+      const msg = e?.name === "AbortError" ? "GLM 调用超时,请重试" : `GLM 网络错误:${e.message}`;
+      return res.status(504).json({ error: msg });
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!resp.ok) {
+      const detail = await resp.text();
+      return res.status(502).json({ error: `GLM 调用失败 (${resp.status})`, detail });
+    }
+    const data = await resp.json();
+    const content = data?.choices?.[0]?.message?.content || "";
+    const lines = parseTourLines(content, stops.length);
+    return res.json({ lines, model: MODEL });
+  } catch (err) {
+    console.error("[/api/generate-tour]", err);
+    return res.status(500).json({ error: String(err?.message || err) });
+  }
+});
+
+function parseTourLines(content, count) {
+  let text = String(content).trim();
+  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) text = fence[1].trim();
+  let parsed;
+  try { parsed = JSON.parse(text); }
+  catch {
+    const m = text.match(/\{[\s\S]*\}/);
+    parsed = m ? JSON.parse(m[0]) : {};
+  }
+  let arr = Array.isArray(parsed) ? parsed : parsed.lines || parsed.scripts || parsed.pages || [];
+  const out = arr
+    .map(it => String(it?.line ?? it?.text ?? (typeof it === "string" ? it : "")).trim())
+    .filter(Boolean)
+    .slice(0, count);
+  while (out.length < count) out.push("");
+  return out;
+}
 
 // GLM usually returns clean JSON, but be defensive about code fences / stray text.
 function parseScripts(content, count) {
