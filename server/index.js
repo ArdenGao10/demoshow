@@ -26,7 +26,9 @@ app.use(express.json({ limit: "4mb" }));
 // Widget 部署在用户自己的域名(比如 ardencosmic.com),要从那边跨域调 /api/generate-tour。
 // 只对这个端点开放跨域,其他 /api 路径保持同源。
 app.use((req, res, next) => {
-  if (req.path === "/api/generate-tour" || req.path === "/api/plan-tour") {
+  // widget 嵌在用户自己的域名(比如 ardencosmic.com)里,需要跨域调这几个端点
+  if (req.path === "/api/generate-tour" || req.path === "/api/plan-tour"
+      || req.path === "/api/agent-step" || req.path === "/api/tts") {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -515,6 +517,144 @@ app.post("/api/plan-tour", async (req, res) => {
     return res.status(500).json({ error: String(err?.message || err) });
   }
 });
+
+// 真·agent loop:每一轮 GLM 看当前画面 + 已经做过的事,只决定下一动作。
+// 让 Demi 在用户点击了某个按钮、新场景出现以后,真的能"再讲一段"。
+function buildAgentSystem(name) {
+  return `你是「${name || "Demi"}」,一个温暖的真人讲解员,正在**带访客自动逛**一个网页。
+访客没法自己操作,所有动作都靠你。每一轮我会告诉你:
+- history:你已经讲过的每一句、点过的每个元素
+- visible:当前画面上能交互的所有元素(每点一次画面会切换,visible 也会换)
+
+你的任务:看着 history 和 visible,只决定**下一个动作**。
+
+动作选项:
+- "narrate":走到某个元素旁边,讲一句(不点击)
+- "click":走到某个元素,讲一句,然后让我替访客点它,下一轮就会是新画面
+- "done":已经讲透了,说一句收束话,结束导览
+
+规则:
+- 每句 line 14~32 字,口语化、自然衔接,不要复述按钮原文
+- history 里出现过的 selector 不要再选(除非确实有必要再回去)
+- 想进新场景就用 click;停留在当前画面就 narrate
+- 第一轮通常是 narrate 首屏标题/横幅,做开场+自我介绍
+- 至少要有 1 次 click,带访客进入新场景
+- 5 轮以后开始考虑 done;最多 8 轮必须 done
+- selector 必须从 visible 清单里原样选,不能自己编
+
+只输出 JSON:{"action":"narrate|click|done","selector":"...","line":"..."}
+done 不需要 selector。`;
+}
+function buildAgentUser({ name, tone, pageTitle, history, visible }) {
+  const toneDesc = ({ 轻松亲切: "轻松、亲切", 专业稳重: "专业、稳重", 元气满满: "活力满满、有感染力" })[tone] || "轻松亲切";
+  const hist = history.length
+    ? history.map((h, i) => `${i + 1}. [${h.action}] ${h.selector || "-"}  「${(h.line || "").slice(0, 60)}」`).join("\n")
+    : "(还没开始,这是第 1 轮)";
+  const list = visible.map((v, i) =>
+    `${i + 1}. [${v.role || v.tag}] "${String(v.text || "").slice(0, 80)}"  →  ${v.selector}`
+  ).join("\n");
+  return `讲解人:${name || "Demi"}
+语气:${toneDesc}
+页面标题:${pageTitle || "(无)"}
+
+【你已经做过的事(history)】
+${hist}
+
+【当前画面能交互的元素(visible)】
+${list}
+
+请决定下一步。`;
+}
+
+app.post("/api/agent-step", async (req, res) => {
+  try {
+    const { name, tone, pageTitle, history, visible } = req.body || {};
+    if (!Array.isArray(visible) || !visible.length) {
+      return res.status(400).json({ error: "缺少 visible 元素清单" });
+    }
+    const hist = Array.isArray(history) ? history.slice(-10) : [];
+    if (!API_KEY) {
+      // 降级:看看 history 长度,前两轮挑没出现过的就 narrate,第 3 轮 click 第一个 button,第 4 轮 done
+      const used = new Set(hist.map(h => h.selector).filter(Boolean));
+      const fresh = visible.filter(v => !used.has(v.selector));
+      if (hist.length >= 4 || !fresh.length) {
+        return res.json({ action: "done", line: "今天就逛到这,欢迎自己上手玩一会!", model: "local-demo" });
+      }
+      const pick = fresh[0];
+      const isClickable = pick.tag === "button" || pick.tag === "a" || pick.role === "按钮";
+      return res.json({
+        action: hist.length === 2 && isClickable ? "click" : "narrate",
+        selector: pick.selector,
+        line: hist.length === 0
+          ? `大家好,我是 ${name || "Demi"},先看这块——${(pick.text || "").slice(0, 16)}。`
+          : `这块是${(pick.text || "亮点").slice(0, 18)},很有意思。`,
+        model: "local-demo",
+        warning: "未配置 ZHIPU_API_KEY,使用本地占位决策。",
+      });
+    }
+
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), Number(process.env.GLM_TIMEOUT_MS) || 30000);
+    let resp;
+    try {
+      resp = await fetch(GLM_URL, {
+        method: "POST",
+        signal: ctrl.signal,
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${API_KEY}` },
+        body: JSON.stringify({
+          model: MODEL,
+          temperature: 0.6,
+          top_p: 0.9,
+          max_tokens: 400,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: buildAgentSystem(name) },
+            { role: "user", content: buildAgentUser({ name, tone, pageTitle, history: hist, visible }) },
+          ],
+        }),
+      });
+    } catch (e) {
+      const msg = e?.name === "AbortError" ? "GLM 调用超时" : `GLM 网络错误:${e.message}`;
+      return res.status(504).json({ error: msg });
+    } finally { clearTimeout(timer); }
+    if (!resp.ok) {
+      const detail = await resp.text();
+      return res.status(502).json({ error: `GLM 调用失败 (${resp.status})`, detail });
+    }
+    const data = await resp.json();
+    const content = data?.choices?.[0]?.message?.content || "";
+    const step = parseAgentStep(content, visible);
+    return res.json({ ...step, model: MODEL });
+  } catch (err) {
+    console.error("[/api/agent-step]", err);
+    return res.status(500).json({ error: String(err?.message || err) });
+  }
+});
+
+function parseAgentStep(content, visible) {
+  let text = String(content).trim();
+  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) text = fence[1].trim();
+  let parsed;
+  try { parsed = JSON.parse(text); }
+  catch { const m = text.match(/\{[\s\S]*\}/); parsed = m ? JSON.parse(m[0]) : {}; }
+  const action = String(parsed?.action || "").toLowerCase();
+  const line = String(parsed?.line || parsed?.text || "").trim();
+  if (action === "done") return { action: "done", line: line || "今天就讲到这,欢迎自己上手玩一会!" };
+  const selector = String(parsed?.selector || "").trim();
+  const valid = new Set(visible.map(v => v.selector));
+  // 防 AI 编造 selector
+  if (!valid.has(selector)) {
+    // 退而求其次:挑 visible 里第一个没在 history 里的(这里没 history,所以挑第 1 个)
+    if (!visible.length) return { action: "done", line: line || "看完啦!" };
+    return { action: action === "click" ? "click" : "narrate", selector: visible[0].selector, line: line || "这块挺有意思,简单看一下。" };
+  }
+  return {
+    action: action === "click" ? "click" : "narrate",
+    selector,
+    line: line || "这块挺有意思,简单看一下。",
+  };
+}
 
 function parsePlannedSteps(content, visible) {
   let text = String(content).trim();

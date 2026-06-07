@@ -240,16 +240,64 @@
   }
   function stopMouth() { if (mouthTimer) { clearInterval(mouthTimer); mouthTimer = null; } }
 
-  function speak(text, onend) {
+  // 浏览器内置 TTS:作为云端 TTS 不可用时的回退
+  function speakBrowser(text, onend) {
     try { speechSynthesis.cancel(); } catch (e) {}
     const u = new SpeechSynthesisUtterance(text);
-    u.lang = "zh-CN"; u.rate = rate; u.pitch = 1; // 倍速：讲得快一点
+    u.lang = "zh-CN"; u.rate = rate; u.pitch = 1;
     if (voice) u.voice = voice;
     let done = false;
     const finish = () => { if (done) return; done = true; stopMouth(); setPose("point", "smile"); onend && onend(); };
-    u.onstart = () => startMouth(); // 声音起来才张嘴 → 音画同步
+    u.onstart = () => startMouth();
     u.onend = finish; u.onerror = finish;
     speechSynthesis.speak(u);
+  }
+
+  // 云端 cogtts:每句缓存 objectURL,二次播放不再计费
+  const ttsCache = new Map();
+  let currentAudio = null;
+  async function fetchTtsClip(text) {
+    const key = "default::" + text;
+    if (ttsCache.has(key)) return ttsCache.get(key);
+    const r = await fetch(API_BASE + "/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (!r.ok) {
+      let msg = `tts ${r.status}`;
+      try { const j = await r.json(); msg = j.error || msg; } catch (e) {}
+      const err = new Error(msg); err.status = r.status; throw err;
+    }
+    const url = URL.createObjectURL(await r.blob());
+    ttsCache.set(key, url);
+    return url;
+  }
+  function stopCurrentAudio() {
+    if (currentAudio) {
+      try { currentAudio.pause(); currentAudio.src = ""; } catch (e) {}
+      currentAudio = null;
+    }
+  }
+  // 主 speak:先用云端 cogtts,失败再回退浏览器 TTS,保证一定能讲
+  function speak(text, onend) {
+    stopCurrentAudio();
+    try { speechSynthesis.cancel(); } catch (e) {}
+    let done = false;
+    const finish = () => { if (done) return; done = true; stopMouth(); setPose("point", "smile"); onend && onend(); };
+    fetchTtsClip(text).then(url => {
+      const a = new Audio(url);
+      a.preload = "auto";
+      a.playbackRate = rate;
+      currentAudio = a;
+      a.onplay = () => startMouth();
+      a.onended = () => { if (currentAudio === a) currentAudio = null; finish(); };
+      a.onerror = () => { if (currentAudio === a) currentAudio = null; speakBrowser(text, finish); };
+      a.play().catch(() => { speakBrowser(text, finish); });
+    }).catch(() => {
+      // 云端不可用(余额/CORS/未配 key) → 回退浏览器,绝不卡住
+      speakBrowser(text, finish);
+    });
   }
 
   // 把小人移动到目标元素旁边，朝向它，指着它
@@ -341,7 +389,11 @@
     else { try { speechSynthesis.resume(); } catch (e) {} if (!speechSynthesis.speaking) go(idx); }
   }
 
-  function pauseSpeech() { try { speechSynthesis.pause(); } catch (e) {} stopMouth(); }
+  function pauseSpeech() {
+    try { speechSynthesis.pause(); } catch (e) {}
+    if (currentAudio) { try { currentAudio.pause(); } catch (e) {} }
+    stopMouth();
+  }
   // 切走 / 切标签页 / 最小化时，立刻闭嘴，不在后台继续讲。
   function onVisibility() {
     if (document.hidden && charEl) { auto = false; if (btnPlay) btnPlay.textContent = "▶"; pauseSpeech(); }
@@ -350,6 +402,7 @@
   function stop() {
     auto = false;
     try { speechSynthesis.cancel(); } catch (e) {}
+    stopCurrentAudio();
     stopMouth();
     document.removeEventListener("visibilitychange", onVisibility);
     [charEl, ringEl, barEl].forEach(n => n && n.remove());
@@ -787,46 +840,132 @@
     if (el) el.remove();
   }
 
-  let autoRunning = false;
-  async function planAndRunAuto(opts) {
-    if (autoRunning) return;
-    autoRunning = true;
-    opts = opts || {};
-    if (edit) stopEdit();
-    showAutoToast("✦ Demi 正在看你的页面…");
-    try {
-      const visible = collectVisibleInteractables();
-      if (!visible.length) throw new Error("页面上没找到可交互的元素");
-      const resp = await fetch(API_BASE + "/api/plan-tour", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: opts.name || "Demi",
-          tone: opts.tone || "轻松亲切",
-          pageTitle: document.title || "",
-          visible,
-        }),
-      });
-      if (!resp.ok) {
-        const j = await resp.json().catch(() => ({}));
-        throw new Error(j.error || `规划失败 (${resp.status})`);
-      }
-      const data = await resp.json();
-      const steps = (data.steps || []).filter(s => s.selector && s.line && document.querySelector(s.selector));
-      if (!steps.length) throw new Error("AI 没规划出有效路径");
-      hideAutoToast();
-      showAutoToast("✦ 规划好了, " + steps.length + " 站, 开讲!");
-      setTimeout(hideAutoToast, 1800);
-      window.DemiTour.start(steps, { auto: true, name: opts.name || "Demi", _force: true });
-    } catch (e) {
-      console.error("[Demi auto]", e);
-      hideAutoToast();
-      showAutoToast("Demi 跑不起来:" + (e.message || e));
-      setTimeout(hideAutoToast, 5000);
-    } finally {
-      autoRunning = false;
+  // ---- Agent loop:每一步都重新观察新画面再决定下一动作 ----
+  // 跟"一次性规划全程"不同:每点完一次都重新扫页面,让 Demi 能在弹窗/新场景里继续讲。
+  const wait = (ms) => new Promise(r => setTimeout(r, ms));
+  function moveToAsync(el) { return new Promise(resolve => moveTo(el, resolve)); }
+  function speakAsync(text) { return new Promise(resolve => speak(text, resolve)); }
+  // 等页面状态变化(点击触发了路由/弹窗后):用 visible 列表的指纹做对比
+  async function waitForDomShift(prevFingerprint, timeoutMs) {
+    const t0 = Date.now();
+    while (Date.now() - t0 < timeoutMs) {
+      await wait(140);
+      if (!charEl) return;
+      const cur = visibleFingerprint();
+      if (cur !== prevFingerprint) return;
     }
   }
+  function visibleFingerprint() {
+    return collectVisibleInteractables().map(v => v.selector + "::" + (v.text || "")).join("|");
+  }
+
+  let agentRunning = false;
+  async function agentLoop(opts) {
+    if (agentRunning) return;
+    agentRunning = true;
+    opts = opts || {};
+    if (edit) stopEdit();
+    onDoneCb = typeof opts.onDone === "function" ? opts.onDone : null;
+    showAutoToast("✦ Demi 正在看你的页面…");
+
+    // 让小人/对话泡/高亮框就位,但跳过 go() 的预设流程
+    injectOnce();
+    loadVoice();
+    if (!charEl) {
+      buildDom();
+      document.addEventListener("visibilitychange", onVisibility);
+      charEl.style.transform = `translate(${window.innerWidth - 130}px, ${window.innerHeight - 200}px)`;
+      await wait(280);
+    }
+    auto = true;
+
+    const history = [];
+    const MAX = 8;
+    try {
+      for (let iter = 1; iter <= MAX; iter++) {
+        if (!charEl || !auto) break;
+        await wait(420); // 让任何动画落定
+        if (iter === 1) hideAutoToast();
+        const visible = collectVisibleInteractables();
+        if (!visible.length) {
+          showAutoToast("当前画面 Demi 看不到可交互的东西");
+          await wait(1400);
+          break;
+        }
+
+        let step;
+        try {
+          const resp = await fetch(API_BASE + "/api/agent-step", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              name: opts.name || "Demi",
+              tone: opts.tone || "轻松亲切",
+              pageTitle: document.title || "",
+              history,
+              visible,
+            }),
+          });
+          if (!resp.ok) {
+            const j = await resp.json().catch(() => ({}));
+            throw new Error(j.error || `agent-step ${resp.status}`);
+          }
+          step = await resp.json();
+        } catch (e) {
+          showAutoToast("Demi 思考失败:" + e.message);
+          await wait(2400);
+          break;
+        }
+
+        if (stepLabel) stepLabel.textContent = `${iter}`;
+
+        // done:就地讲最后一句然后收尾
+        if (step.action === "done") {
+          if (step.line) {
+            bubbleEl.textContent = step.line;
+            bubbleEl.classList.add("show");
+            await speakAsync(step.line);
+          }
+          break;
+        }
+
+        const el = document.querySelector(step.selector);
+        if (!el) {
+          history.push({ action: "skipped", selector: step.selector, line: step.line });
+          continue;
+        }
+
+        try { el.scrollIntoView({ behavior: "smooth", block: "center" }); } catch (e) {}
+        await wait(420);
+        if (!charEl) break;
+        bubbleEl.classList.remove("show");
+        await moveToAsync(el);
+        if (!charEl) break;
+        bubbleEl.textContent = step.line || "";
+        bubbleEl.classList.add("show");
+        await speakAsync(step.line || "");
+        history.push({ action: step.action, selector: step.selector, line: step.line });
+
+        if (step.action === "click") {
+          const before = visibleFingerprint();
+          try { el.click(); } catch (e) {}
+          await waitForDomShift(before, 2800);
+        }
+      }
+    } catch (e) {
+      console.error("[Demi agent]", e);
+      showAutoToast("Demi 跑不下去:" + (e.message || e));
+      await wait(2400);
+    } finally {
+      hideAutoToast();
+      auto = false;
+      if (btnPlay) btnPlay.textContent = "▶";
+      agentRunning = false;
+      if (typeof onDoneCb === "function") { const cb = onDoneCb; onDoneCb = null; setTimeout(cb, 200); }
+    }
+  }
+  // 老名字别打死:同义指向 agentLoop
+  const planAndRunAuto = agentLoop;
 
   function exportPlayLink() {
     if (!edit) return;
