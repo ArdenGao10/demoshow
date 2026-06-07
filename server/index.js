@@ -26,7 +26,7 @@ app.use(express.json({ limit: "4mb" }));
 // Widget 部署在用户自己的域名(比如 ardencosmic.com),要从那边跨域调 /api/generate-tour。
 // 只对这个端点开放跨域,其他 /api 路径保持同源。
 app.use((req, res, next) => {
-  if (req.path === "/api/generate-tour") {
+  if (req.path === "/api/generate-tour" || req.path === "/api/plan-tour") {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -424,6 +424,118 @@ function parseTourLines(content, count) {
     .filter(Boolean)
     .slice(0, count);
   while (out.length < count) out.push("");
+  return out;
+}
+
+// AI 自动玩一遍游戏:看一眼初始页面,一次性规划整条导览路径。
+function buildPlannerSystem(name) {
+  return `你是「${name || "Demi"}」,一个温暖的真人讲解员,正在替访客**自动玩**一个网页。
+我会把当前页面上所有能交互的元素(按钮/链接/卡片/标题)给你,请你从里面挑 4~6 个,规划一趟有故事感的导览。
+
+每一站告诉我:走到哪个元素(selector 原样回传)、说什么(line,一句话 14~30 字,口语化)、要不要点它(action: "click" 表示讲完帮访客点一下,这样能切换到下一个场景;省略 action 表示只指着讲)。
+
+规则:
+- 第 1 站是开场:用名字简短自我介绍,点出这是什么产品/游戏
+- 中间挑首屏标题、主 CTA、特色卡片、入口按钮里**最值得展示**的
+- 至少 1 站设 action:"click"——好让导览能进入第二个场景(比如点了"开始"或"出门"会出现新画面)
+- 最后一站是收束、号召
+- 每站都要紧扣那个元素显示的真实文字,不要瞎编功能
+- selector 严格使用我给你的那个字符串原样,不修改
+
+只输出 JSON:{"steps":[{"selector":"...","line":"...","action":"click"}, ...]}
+不要 markdown,不要多余文字。`;
+}
+function buildPlannerUser({ name, tone, pageTitle, visible }) {
+  const toneDesc = ({ 轻松亲切: "轻松、亲切", 专业稳重: "专业、稳重", 元气满满: "活力满满、有感染力" })[tone] || "轻松亲切";
+  const list = visible.map((v, i) =>
+    `${i + 1}. [${v.role || v.tag}] "${String(v.text || "").slice(0, 80)}"  →  ${v.selector}`
+  ).join("\n");
+  return `讲解人:${name || "Demi"}
+语气:${toneDesc}
+页面标题:${pageTitle || "(无)"}
+
+【页面上能交互的元素清单】
+${list}
+
+请挑 4~6 个,规划这一趟自动导览。`;
+}
+
+app.post("/api/plan-tour", async (req, res) => {
+  try {
+    const { name, tone, pageTitle, visible } = req.body || {};
+    if (!Array.isArray(visible) || !visible.length) {
+      return res.status(400).json({ error: "缺少 visible 元素清单" });
+    }
+    if (!API_KEY) {
+      // 降级:取前 4 个
+      const picked = visible.slice(0, 4);
+      return res.json({
+        steps: picked.map((v, i) => ({
+          selector: v.selector,
+          line: i === 0 ? `大家好,我是 ${name || "Demi"},先逛一逛。` : `这里是${(v.text || "亮点").slice(0, 18)}。`,
+        })),
+        model: "local-demo",
+        warning: "未配置 ZHIPU_API_KEY,使用本地占位规划。",
+      });
+    }
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), Number(process.env.GLM_TIMEOUT_MS) || 45000);
+    let resp;
+    try {
+      resp = await fetch(GLM_URL, {
+        method: "POST",
+        signal: ctrl.signal,
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${API_KEY}` },
+        body: JSON.stringify({
+          model: MODEL,
+          temperature: 0.7,
+          top_p: 0.9,
+          max_tokens: 2000,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: buildPlannerSystem(name) },
+            { role: "user", content: buildPlannerUser({ name, tone, pageTitle, visible }) },
+          ],
+        }),
+      });
+    } catch (e) {
+      const msg = e?.name === "AbortError" ? "GLM 调用超时" : `GLM 网络错误:${e.message}`;
+      return res.status(504).json({ error: msg });
+    } finally { clearTimeout(timer); }
+    if (!resp.ok) {
+      const detail = await resp.text();
+      return res.status(502).json({ error: `GLM 调用失败 (${resp.status})`, detail });
+    }
+    const data = await resp.json();
+    const content = data?.choices?.[0]?.message?.content || "";
+    const steps = parsePlannedSteps(content, visible);
+    return res.json({ steps, model: MODEL });
+  } catch (err) {
+    console.error("[/api/plan-tour]", err);
+    return res.status(500).json({ error: String(err?.message || err) });
+  }
+});
+
+function parsePlannedSteps(content, visible) {
+  let text = String(content).trim();
+  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fence) text = fence[1].trim();
+  let parsed;
+  try { parsed = JSON.parse(text); }
+  catch { const m = text.match(/\{[\s\S]*\}/); parsed = m ? JSON.parse(m[0]) : {}; }
+  const arr = Array.isArray(parsed) ? parsed : parsed.steps || parsed.scripts || [];
+  const validSelectors = new Set(visible.map(v => v.selector));
+  const out = [];
+  for (const it of arr) {
+    const selector = String(it?.selector || "").trim();
+    const line = String(it?.line || it?.text || "").trim();
+    if (!selector || !line) continue;
+    if (!validSelectors.has(selector)) continue; // 防止 AI 编造 selector
+    const step = { selector, line };
+    if (it?.action === "click") step.action = "click";
+    out.push(step);
+    if (out.length >= 8) break;
+  }
   return out;
 }
 

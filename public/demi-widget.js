@@ -740,6 +740,94 @@
     }
   }
 
+  // ---- AI 自动玩一遍游戏(降级版):看一眼初始页面 → 一次性规划全条路 → 自动开播 ----
+  function collectVisibleInteractables() {
+    const selSet = "button, a, [role='button'], [onclick], h1, h2, h3, [data-tour], .card, [data-card]";
+    const seen = new Set();
+    const out = [];
+    document.querySelectorAll(selSet).forEach(el => {
+      if (!el || isOwnNode(el)) return;
+      const rect = el.getBoundingClientRect();
+      if (rect.width < 14 || rect.height < 14) return;
+      // 视口里或刚出视口附近的元素才算"看见"
+      if (rect.top > window.innerHeight * 2.5 || rect.bottom < -200) return;
+      const cs = getComputedStyle(el);
+      if (cs.display === "none" || cs.visibility === "hidden" || +cs.opacity < 0.1) return;
+      const sel = genSelector(el);
+      if (!sel || seen.has(sel)) return;
+      seen.add(sel);
+      const text = (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 120);
+      if (!text && el.tagName !== "IMG" && el.tagName !== "BUTTON") return;
+      out.push({
+        tag: el.tagName.toLowerCase(),
+        text,
+        selector: sel,
+        role: describeRole(el),
+      });
+      if (out.length >= 30) return;
+    });
+    return out.slice(0, 30);
+  }
+
+  function showAutoToast(text) {
+    let el = document.getElementById("demi-auto-toast");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "demi-auto-toast";
+      el.style.cssText = "position:fixed;left:50%;top:24px;transform:translateX(-50%);z-index:2147483647;"
+        + "background:#FBF3E4;border:2.5px solid #3B332E;border-radius:18px;padding:12px 22px;"
+        + "font:14px/1.5 -apple-system,system-ui,'PingFang SC',sans-serif;color:#3B332E;"
+        + "box-shadow:0 14px 38px rgba(0,0,0,.22);max-width:80vw;";
+      document.body.appendChild(el);
+    }
+    el.textContent = text;
+  }
+  function hideAutoToast() {
+    const el = document.getElementById("demi-auto-toast");
+    if (el) el.remove();
+  }
+
+  let autoRunning = false;
+  async function planAndRunAuto(opts) {
+    if (autoRunning) return;
+    autoRunning = true;
+    opts = opts || {};
+    if (edit) stopEdit();
+    showAutoToast("✦ Demi 正在看你的页面…");
+    try {
+      const visible = collectVisibleInteractables();
+      if (!visible.length) throw new Error("页面上没找到可交互的元素");
+      const resp = await fetch(API_BASE + "/api/plan-tour", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: opts.name || "Demi",
+          tone: opts.tone || "轻松亲切",
+          pageTitle: document.title || "",
+          visible,
+        }),
+      });
+      if (!resp.ok) {
+        const j = await resp.json().catch(() => ({}));
+        throw new Error(j.error || `规划失败 (${resp.status})`);
+      }
+      const data = await resp.json();
+      const steps = (data.steps || []).filter(s => s.selector && s.line && document.querySelector(s.selector));
+      if (!steps.length) throw new Error("AI 没规划出有效路径");
+      hideAutoToast();
+      showAutoToast("✦ 规划好了, " + steps.length + " 站, 开讲!");
+      setTimeout(hideAutoToast, 1800);
+      window.DemiTour.start(steps, { auto: true, name: opts.name || "Demi", _force: true });
+    } catch (e) {
+      console.error("[Demi auto]", e);
+      hideAutoToast();
+      showAutoToast("Demi 跑不起来:" + (e.message || e));
+      setTimeout(hideAutoToast, 5000);
+    } finally {
+      autoRunning = false;
+    }
+  }
+
   function exportPlayLink() {
     if (!edit) return;
     const valid = edit.steps.filter(s => s.selector && s.line && s.line.trim());
@@ -822,6 +910,7 @@ ${stepsLines}
     edit: startEdit,
     stopEdit,
     encodeLink: encodePlayLink,
+    autoRun: planAndRunAuto,
   };
 
   // 访问 yoursite.com#demi-edit 直接进入编辑模式
@@ -845,7 +934,16 @@ ${stepsLines}
     if (document.body) setTimeout(launch, 60);
     else window.addEventListener("DOMContentLoaded", () => setTimeout(launch, 60));
   }
-  function autoOnHash() { autoEditIfHash(); autoPlayIfHash(); }
+  // 访问 yoursite.com#demi-auto:AI 看页面 → 规划 → 自动开讲。访客也能用,无需手动配。
+  function autoAutoIfHash() {
+    if (typeof location === "undefined" || location.hash !== "#demi-auto") return;
+    if (edit) return;
+    // 等页面挂载完(React 这种延迟渲染的也能等到)
+    const kick = () => setTimeout(() => planAndRunAuto({}), 600);
+    if (document.body) kick();
+    else window.addEventListener("DOMContentLoaded", kick);
+  }
+  function autoOnHash() { autoEditIfHash(); autoPlayIfHash(); autoAutoIfHash(); }
   if (document.readyState === "complete" || document.readyState === "interactive") {
     setTimeout(autoOnHash, 0);
   } else {
@@ -855,5 +953,6 @@ ${stepsLines}
     if (location.hash === "#demi-edit" && !edit) startEdit();
     else if (location.hash !== "#demi-edit" && edit) stopEdit();
     else if (/^#demi-play=/.test(location.hash)) autoPlayIfHash();
+    else if (location.hash === "#demi-auto") autoAutoIfHash();
   });
 })();
