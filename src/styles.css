@@ -201,6 +201,22 @@ button:focus-visible,input:focus-visible{ outline:3px solid var(--orange); outli
 .demi-pick { transition: transform .16s ease; }
 .demi-pick:hover { transform: translateY(-5px) rotate(-2deg); }
 
+/* 素材库抽屉 —— 从右侧滑入,盖在当前页之上 */
+@keyframes drawerSlideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+@keyframes drawerFadeIn { from { opacity: 0; } to { opacity: 1; } }
+.drawer-backdrop {
+  position: fixed; inset: 0; background: rgba(59,51,46,.45);
+  z-index: 40; display: flex; justify-content: flex-end;
+  animation: drawerFadeIn .22s ease-out;
+}
+.drawer-panel {
+  background: var(--paper); width: min(820px, 92vw); height: 100%;
+  display: flex; flex-direction: column;
+  border-left: 3px solid var(--ink);
+  box-shadow: -16px 0 36px rgba(0,0,0,.18);
+  animation: drawerSlideIn .32s cubic-bezier(.2,.7,.2,1.02);
+}
+
 /* 舞台讲解：讲话时小人在台上慢慢来回踱步（走得慢一点，别太快） */
 @keyframes demiPace {
   0%   { transform: translateX(-60px) rotate(-2deg); }

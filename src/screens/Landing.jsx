@@ -13,7 +13,7 @@ export default function Landing({ user, onStart, onDemo, onLibrary, onLogin, onL
       <header style={{ height: 64, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 40px" }}>
         <Brand />
         <div style={{ display: "flex", alignItems: "center", gap: 24, color: "var(--ink-soft)", fontWeight: 600 }}>
-          <button style={navButton} onClick={() => setInfo("how")}>指南</button><button style={navButton} onClick={() => setInfo("settings")}>设置</button>
+          <button style={navButton} onClick={onLibrary}>素材库</button><button style={navButton} onClick={() => setInfo("how")}>指南</button><button style={navButton} onClick={() => setInfo("settings")}>设置</button>
           {user ? <><span>你好，{user.name}</span><button className="btn-ghost" style={{ padding: "8px 18px" }} onClick={onLogout}>退出</button></> : <button className="btn-ghost" style={{ padding: "8px 18px" }} onClick={onLogin}>登录 / 注册</button>}
         </div>
       </header>

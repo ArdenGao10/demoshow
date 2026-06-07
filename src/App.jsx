@@ -14,8 +14,9 @@ import Demo from "./screens/Demo.jsx";
 // Top-level state machine for the main line:
 //   选 Demi → 上传内容 → GLM 生成讲稿 → 逐页语音+动效播放
 export default function App() {
-  const [route, setRoute] = useState("landing"); // landing|login|create|library|loading|play|demo
-  const [libFrom, setLibFrom] = useState("create"); // 素材库从哪进来的，决定返回去哪
+  const [route, setRoute] = useState("landing"); // landing|login|create|loading|play|demo
+  const [libraryOpen, setLibraryOpen] = useState(false); // 素材库改为右侧抽屉,叠在当前路由之上
+  const [libFrom, setLibFrom] = useState("create"); // 决定挑完形态后是留在原地,还是跳到创建页
   const [formId, setFormId] = useState(DEFAULT_FORM_ID); // 伟伟
   const [tone, setTone] = useState("轻松亲切");
   const [layout, setLayout] = useState("corner"); // corner|runway|pip
@@ -107,7 +108,7 @@ export default function App() {
   return (
     <>
       <SketchDefs />
-      {route === "landing" && <Landing user={user} onStart={() => go(user ? "create" : "login")} onDemo={() => go("demo")} onLibrary={() => { setLibFrom("landing"); go("library"); }} onLogin={() => go("login")} onLogout={handleLogout} />}
+      {route === "landing" && <Landing user={user} onStart={() => go(user ? "create" : "login")} onDemo={() => go("demo")} onLibrary={() => { setLibFrom("landing"); setLibraryOpen(true); }} onLogin={() => go("login")} onLogout={handleLogout} />}
       {route === "demo" && <Demo onBack={() => go("landing")} onStart={() => go(user ? "create" : "login")} />}
       {route === "login" && <Login onAuth={(nextUser) => { setUser(nextUser); go("landing"); }} onBack={() => go("landing")} />}
       {route === "create" && (
@@ -119,19 +120,21 @@ export default function App() {
           onPickForm={setFormId}
           onPickTone={setTone}
           onPickLayout={setLayout}
-          onOpenLibrary={() => { setLibFrom("create"); go("library"); }}
+          onOpenLibrary={() => { setLibFrom("create"); setLibraryOpen(true); }}
           onGenerate={handleGenerate}
           onBack={() => go("landing")}
         />
       )}
-      {route === "library" && (
+      {libraryOpen && (
         <Library
           formId={formId}
           onUse={(id) => {
             setFormId(id);
-            go("create");
+            setLibraryOpen(false);
+            // 从主页打开:挑完形态直接进创建页;从其它页打开:留在原页面
+            if (libFrom === "landing") go("create");
           }}
-          onBack={() => go(libFrom)}
+          onClose={() => setLibraryOpen(false)}
         />
       )}
       {route === "loading" && <Loading form={form} deck={deck} />}

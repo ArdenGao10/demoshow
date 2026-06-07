@@ -13,7 +13,7 @@ const LAYOUTS = [
   ["pip", "画中画", "幻灯片最大，小人缩成圆形徽章"],
 ];
 
-export default function Create({ formId, tone, layout, error, onPickForm, onPickTone, onPickLayout, onOpenLibrary, onGenerate, onBack }) {
+export default function Create({ formId, tone, layout, error, onPickForm, onPickTone, onPickLayout, onOpenLibrary, onGenerate, onBack, readOnly = false, onStartReal }) {
   const inputRef = useRef(null);
   const [deck, setDeck] = useState(() => {
     try {
@@ -25,12 +25,15 @@ export default function Create({ formId, tone, layout, error, onPickForm, onPick
   const [readErr, setReadErr] = useState("");
   const [mode, setMode] = useState("ppt"); // ppt | embed
   const form = findForm(formId);
+  // readOnly:演示页用,强制把所有步骤都展开,让 Demi 能走过完整的创建流程。
+  const expanded = readOnly || !!deck;
 
   useEffect(() => {
+    if (readOnly) return; // 演示模式不动用户的草稿
     if (!deck) { localStorage.removeItem("demi_draft_deck"); return; }
     try { localStorage.setItem("demi_draft_deck", JSON.stringify(deck)); }
     catch { /* deck too large for localStorage — silently skip persistence */ }
-  }, [deck]);
+  }, [deck, readOnly]);
 
   const loadFile = async (file) => {
     if (!file) return;
@@ -56,26 +59,25 @@ export default function Create({ formId, tone, layout, error, onPickForm, onPick
   return (
     <div className="screen speckle" style={{ display: "flex", flexDirection: "column" }}>
       <header style={{ height: 60, flex: "0 0 60px", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 28px", borderBottom: "2px solid rgba(59,51,46,.12)" }}>
-        <button onClick={onBack} style={linkButton}><span style={{ fontSize: 22 }}>←</span><span className="h-title">新建演示</span></button>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <button onClick={onBack} style={linkButton}><span style={{ fontSize: 22 }}>←</span><span className="h-title">{readOnly ? "返回主页" : "新建演示"}</span></button>
+          {readOnly && <span className="chip" style={{ background: "var(--orange-pale)", borderColor: "var(--orange-deep)" }}>演示模式 · 只看不改</span>}
+        </div>
+        <div data-tour="mode-tabs" style={{ display: "flex", gap: 8, pointerEvents: readOnly ? "none" : undefined }}>
           {[["ppt", "上传 PPT 帮你讲"], ["embed", "嵌入网站帮你讲"]].map(([id, label]) => (
             <button key={id} onClick={() => { demiStop(); setMode(id); }} className="sketch r2" style={{ cursor: "pointer", padding: "8px 16px", fontWeight: 700, background: mode === id ? "var(--orange-pale)" : "#fff", borderColor: mode === id ? "var(--orange-deep)" : "var(--ink)" }}>{label}</button>
           ))}
         </div>
-        <span className="hand" style={{ fontSize: 19, color: "var(--ink-soft)" }}>{deck ? "草稿已保存 ✓" : "选个形象、传上内容 →"}</span>
+        {readOnly
+          ? <button className="btn-demi" style={{ padding: "9px 18px", fontSize: 15 }} onClick={onStartReal}>我也要做一个 →</button>
+          : <span className="hand" style={{ fontSize: 19, color: "var(--ink-soft)" }}>{deck ? "草稿已保存 ✓" : "选个形象、传上内容 →"}</span>}
       </header>
       {mode === "embed" ? (
-        <EmbedPanel form={form} formId={formId} onPickForm={onPickForm} onOpenLibrary={onOpenLibrary} />
+        <EmbedPanel form={form} formId={formId} onPickForm={onPickForm} onOpenLibrary={onOpenLibrary} readOnly={readOnly} />
       ) : (
       <div style={{ flex: 1, display: "grid", gridTemplateColumns: "440px 1fr", minHeight: 0 }}>
-        <aside style={{ padding: "24px 30px", overflowY: "auto", borderRight: "2px solid rgba(59,51,46,.12)" }}>
-          <Step title="① 选一个形态" hint="她会用这个样子替你出场" action={<button style={textButton} onClick={onOpenLibrary}>逛素材库 →</button>}>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 10 }}>
-              {PICKS.map((f) => <button key={f.id} onClick={() => onPickForm(f.id)} className="sketch" style={{ height: 78, padding: 2, cursor: "pointer", position: "relative", background: f.id === formId ? "var(--orange-pale)" : "#fff", borderColor: f.id === formId ? "var(--orange-deep)" : "var(--ink)" }}><FormGlyph form={f} height={68} />{f.id === formId && <b style={check}>✓</b>}</button>)}
-              <button className="sketch-dash" onClick={onOpenLibrary} style={{ background: "transparent", cursor: "pointer", color: "var(--ink-soft)" }}>+<br /><small>更多</small></button>
-            </div>
-          </Step>
-          <Step title="② 上传 HTML 幻灯片" hint="支持含多个 section / .slide 的 HTML">
+        <aside style={{ padding: "24px 30px", overflowY: "auto", borderRight: "2px solid rgba(59,51,46,.12)", pointerEvents: readOnly ? "none" : undefined }}>
+          <Step title="① 上传 HTML 幻灯片" hint="支持含多个 section / .slide 的 HTML" anchor="upload">
             <input ref={inputRef} type="file" accept=".html,.htm,text/html" hidden onChange={(e) => loadFile(e.target.files?.[0])} />
             {!deck ? (
               <>
@@ -100,14 +102,27 @@ export default function Create({ formId, tone, layout, error, onPickForm, onPick
               </div>;
             })()}
           </Step>
-          <Step title="③ 讲解语气">
-            <div style={{ display: "flex", gap: 8 }}>{["轻松亲切", "专业稳重", "元气满满"].map((t) => <button key={t} className="chip" onClick={() => onPickTone(t)} style={{ cursor: "pointer", background: tone === t ? "var(--orange-pale)" : "#fff", borderColor: tone === t ? "var(--orange-deep)" : "var(--ink)" }}>{t}</button>)}</div>
-          </Step>
-          <Step title="④ 选择演示形态" hint="来自 design 里的三种播放布局">
-            <div style={{ display: "grid", gap: 8 }}>{LAYOUTS.map(([id, name, desc]) => <button key={id} onClick={() => onPickLayout(id)} className="sketch r2" style={{ cursor: "pointer", padding: "9px 12px", textAlign: "left", background: layout === id ? "var(--orange-pale)" : "#fff", borderColor: layout === id ? "var(--orange-deep)" : "var(--ink)" }}><b>{name}</b><small style={{ display: "block", color: "var(--ink-soft)", marginTop: 2 }}>{desc}</small></button>)}</div>
-          </Step>
-          {error && <div style={{ color: "#a33", fontWeight: 600, fontSize: 13, marginBottom: 12 }}>{error}</div>}
-          <button className="btn-demi" disabled={!deck} onClick={() => onGenerate(deck)} style={{ width: "100%", justifyContent: "center", opacity: deck ? 1 : .45 }}><Sparkle size={18} color="#fff" /> 生成讲解 →</button>
+          {!expanded && (
+            <div className="hand" style={{ fontSize: 17, color: "var(--ink-soft)", padding: "8px 4px 24px", lineHeight: 1.6 }}>
+              ✦ 上传后,再挑形态、语气、布局 →
+            </div>
+          )}
+          {expanded && <>
+            <Step title="② 选一个形态" hint="她会用这个样子替你出场" anchor="form" action={<button style={textButton} onClick={onOpenLibrary}>逛素材库 →</button>}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 10 }}>
+                {PICKS.map((f) => <button key={f.id} onClick={() => onPickForm(f.id)} className="sketch" style={{ height: 78, padding: 2, cursor: "pointer", position: "relative", background: f.id === formId ? "var(--orange-pale)" : "#fff", borderColor: f.id === formId ? "var(--orange-deep)" : "var(--ink)" }}><FormGlyph form={f} height={68} />{f.id === formId && <b style={check}>✓</b>}</button>)}
+                <button className="sketch-dash" onClick={onOpenLibrary} style={{ background: "transparent", cursor: "pointer", color: "var(--ink-soft)" }}>+<br /><small>更多</small></button>
+              </div>
+            </Step>
+            <Step title="③ 讲解语气" anchor="tone">
+              <div style={{ display: "flex", gap: 8 }}>{["轻松亲切", "专业稳重", "元气满满"].map((t) => <button key={t} className="chip" onClick={() => onPickTone(t)} style={{ cursor: "pointer", background: tone === t ? "var(--orange-pale)" : "#fff", borderColor: tone === t ? "var(--orange-deep)" : "var(--ink)" }}>{t}</button>)}</div>
+            </Step>
+            <Step title="④ 选择演示形态" hint="来自 design 里的三种播放布局" anchor="layout">
+              <div style={{ display: "grid", gap: 8 }}>{LAYOUTS.map(([id, name, desc]) => <button key={id} onClick={() => onPickLayout(id)} className="sketch r2" style={{ cursor: "pointer", padding: "9px 12px", textAlign: "left", background: layout === id ? "var(--orange-pale)" : "#fff", borderColor: layout === id ? "var(--orange-deep)" : "var(--ink)" }}><b>{name}</b><small style={{ display: "block", color: "var(--ink-soft)", marginTop: 2 }}>{desc}</small></button>)}</div>
+            </Step>
+            {error && <div style={{ color: "#a33", fontWeight: 600, fontSize: 13, marginBottom: 12 }}>{error}</div>}
+            <button data-tour="generate" className="btn-demi" disabled={!deck} onClick={() => onGenerate(deck)} style={{ width: "100%", justifyContent: "center", opacity: deck ? 1 : .45 }}><Sparkle size={18} color="#fff" /> 生成讲解 →</button>
+          </>}
         </aside>
         <section style={{ position: "relative", background: "var(--paper-2)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 30 }}>
           <div className="hand" style={{ position: "absolute", top: 20, left: 28, fontSize: 21, color: "var(--ink-soft)" }}>舞台预览 · 你的幻灯片是主角 ↓</div>
@@ -139,7 +154,7 @@ const DEFAULT_LINES = [
   "最后看看这块，想了解更多随时点开。",
 ].join("\n");
 
-function EmbedPanel({ form, formId, onPickForm, onOpenLibrary }) {
+function EmbedPanel({ form, formId, onPickForm, onOpenLibrary, readOnly = false }) {
   const [lines, setLines] = useState(DEFAULT_LINES);
   const [copied, setCopied] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -168,7 +183,7 @@ ${lineArr.map((l, i) => `    { selector: "#换成你的元素${i + 1}", line: ${
   };
 
   return (
-    <div style={{ flex: 1, display: "grid", gridTemplateColumns: "440px 1fr", minHeight: 0 }}>
+    <div style={{ flex: 1, display: "grid", gridTemplateColumns: "440px 1fr", minHeight: 0, pointerEvents: readOnly ? "none" : undefined }}>
       <aside style={{ padding: "24px 30px", overflowY: "auto", borderRight: "2px solid rgba(59,51,46,.12)" }}>
         <Step title="① 选一个形态" hint="她会用这个样子出现在你的网站上" action={<button style={textButton} onClick={onOpenLibrary}>逛素材库 →</button>}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(6,1fr)", gap: 10 }}>
@@ -225,8 +240,8 @@ function PreviewPresenter({ form, layout }) {
   return <div style={style}><FormGlyph form={form} height={layout === "pip" ? 92 : 100} /><div className="ground-oval" style={{ width: 96, height: 16, margin: "-12px auto 0" }} /></div>;
 }
 
-function Step({ title, hint, action, children }) {
-  return <section style={{ marginBottom: 25 }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}><b className="h-title">{title}</b>{action}</div>{hint && <div className="hand" style={{ fontSize: 18, color: "var(--ink-soft)", margin: "4px 0 12px" }}>{hint}</div>}{children}</section>;
+function Step({ title, hint, action, anchor, children }) {
+  return <section data-tour={anchor} style={{ marginBottom: 25 }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}><b className="h-title">{title}</b>{action}</div>{hint && <div className="hand" style={{ fontSize: 18, color: "var(--ink-soft)", margin: "4px 0 12px" }}>{hint}</div>}{children}</section>;
 }
 const linkButton = { border: 0, background: "transparent", cursor: "pointer", display: "flex", alignItems: "center", gap: 14, color: "var(--ink)" };
 const textButton = { border: 0, background: "transparent", color: "var(--orange-deep)", fontWeight: 700, cursor: "pointer", padding: 0 };
