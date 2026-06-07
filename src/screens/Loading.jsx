@@ -19,30 +19,53 @@ export default function Loading({ form, deck }) {
 
   useEffect(() => {
     const t0 = Date.now();
-    const id = setInterval(() => setElapsed(Date.now() - t0), 120);
+    const id = setInterval(() => setElapsed(Date.now() - t0), 80);
     return () => clearInterval(id);
   }, []);
 
   // 渐进 + 渐缓：用 1 - e^(-t/τ) 形状，前快后慢，但永远不到 100%，避免"卡在 100% 却还没切走"。
   const progress = 1 - Math.exp(-elapsed / (totalMs * 0.5));
   const pct = Math.min(0.96, progress);
-  // 按进度推进步骤完成度：4 步均匀分到 0~96%。
-  const doneSteps = Math.floor(pct * STEPS.length);
+  // 把总进度均分到每一步：当前在做的步骤会显示自己的小进度条。
+  const stepSize = 1 / STEPS.length;
+  const stepIndex = Math.min(STEPS.length - 1, Math.floor(pct / stepSize));
 
   return <div className="screen speckle" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
     <div style={{ position: "absolute", top: 26, left: 30 }}><Brand /></div>
     <div className="bob"><FormGlyph form={form} height={220} /></div><div className="ground-oval" style={{ width: 150, height: 22, marginTop: -20 }} />
     <h1 className="h-title" style={{ margin: "24px 0 6px" }}>{form?.name} 正在读你的幻灯片…</h1>
     <p className="hand" style={{ fontSize: 23, color: "var(--orange-deep)", margin: "0 0 24px" }}>马上就好，先帮你把开场练顺~</p>
-    <div className="sketch" style={{ padding: "18px 26px", width: 390 }}>
+    <div className="sketch" style={{ padding: "18px 26px", width: 420 }}>
       {STEPS.map((label, i) => {
-        const state = i < doneSteps ? "done" : i === doneSteps ? "doing" : "todo";
-        return <div key={i} style={{ display: "flex", gap: 12, padding: "8px 0", opacity: state === "todo" ? .45 : 1 }}>
-          <b style={{ color: state === "done" ? "var(--sage)" : state === "doing" ? "var(--orange-deep)" : "var(--ink-soft)" }}>{state === "done" ? "✓" : state === "doing" ? "◌" : "○"}</b>
-          <span style={{ fontWeight: 600 }}>{label(n)}</span>
+        const localPct = Math.max(0, Math.min(1, (pct - i * stepSize) / stepSize));
+        const state = i < stepIndex ? "done" : i === stepIndex ? "doing" : "todo";
+        const labelColor = state === "done" ? "var(--sage)" : state === "doing" ? "var(--orange-deep)" : "var(--ink-soft)";
+        return <div key={i} style={{ padding: "6px 0", opacity: state === "todo" ? .5 : 1 }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            <span style={{ width: 18, display: "inline-flex", justifyContent: "center", color: labelColor, fontWeight: 700 }}>
+              {state === "done" ? "✓" : state === "doing" ? <span className="loading-spinner" /> : "○"}
+            </span>
+            <span style={{ fontWeight: 600, flex: 1 }}>{label(n)}</span>
+            <span style={{ fontSize: 13, color: "var(--ink-soft)", minWidth: 36, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>
+              {Math.round(localPct * 100)}%
+            </span>
+          </div>
+          <div style={{ height: 6, border: "1.5px solid var(--ink)", borderRadius: 12, overflow: "hidden", marginTop: 4, marginLeft: 28, background: "var(--paper-2)" }}>
+            <div
+              className={state === "doing" ? "loading-bar-active" : ""}
+              style={{
+                width: `${Math.round(localPct * 100)}%`,
+                height: "100%",
+                background: state === "doing" ? undefined : state === "done" ? "var(--sage)" : "var(--orange)",
+                transition: "width .2s ease-out",
+              }}
+            />
+          </div>
         </div>;
       })}
-      <div style={{ height: 12, border: "2px solid var(--ink)", borderRadius: 20, overflow: "hidden", marginTop: 12 }}><div style={{ width: `${Math.round(pct * 100)}%`, height: "100%", background: "var(--orange)", transition: "width .3s ease-out" }} /></div>
+      <div style={{ height: 12, border: "2px solid var(--ink)", borderRadius: 20, overflow: "hidden", marginTop: 14 }}>
+        <div style={{ width: `${Math.round(pct * 100)}%`, height: "100%", background: "var(--orange)", transition: "width .3s ease-out" }} />
+      </div>
     </div>
     <BlackCat style={{ height: 52, position: "absolute", bottom: 46, right: 150 }} /><GrassTuft style={{ height: 32, position: "absolute", bottom: 44, left: 170 }} />
   </div>;

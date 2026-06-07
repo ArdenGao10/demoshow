@@ -4,6 +4,7 @@ import { parseDeckHtml, SAMPLE_DECK_HTML, SAMPLE_SCRIPTS } from "../lib/slides.j
 import SlideFrame from "../components/SlideFrame.jsx";
 import { start as demiStart, stop as demiStop } from "../lib/demiWidget.js";
 import { formFrames } from "../lib/charFrames.jsx";
+import { Sparkle, Warn, Trash, Rabbit, Medal, ArrowUp } from "../lib/icons.jsx";
 
 const PICKS = [HUMANS[5], HUMANS[3], HUMANS[1], PETS[0], CHIBI[0]];
 const LAYOUTS = [
@@ -79,9 +80,9 @@ export default function Create({ formId, tone, layout, error, onPickForm, onPick
             {!deck ? (
               <>
                 <div className="sketch-dash" role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") inputRef.current?.click(); }} onClick={() => inputRef.current?.click()} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); loadFile(e.dataTransfer.files?.[0]); }} style={{ padding: 18, textAlign: "center", cursor: "pointer" }}>
-                  <div style={{ fontSize: 26 }}>⬆</div><b>{reading ? "正在读取…" : "拖到这里，或点击上传"}</b>
+                  <div style={{ display: "flex", justifyContent: "center", marginBottom: 4 }}><ArrowUp size={26} color="var(--ink-soft)" /></div><b>{reading ? "正在读取…" : "拖到这里，或点击上传"}</b>
                 </div>
-                {readErr && <div className="sketch r2" style={{ marginTop: 10, padding: "10px 14px", background: "#FBE7DE", color: "#b5651d", fontWeight: 600, fontSize: 13, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}><span>⚠ {readErr}</span><button onClick={() => setReadErr("")} style={{ border: 0, background: "transparent", cursor: "pointer", color: "#b5651d", fontWeight: 700 }}>×</button></div>}
+                {readErr && <div className="sketch r2" style={{ marginTop: 10, padding: "10px 14px", background: "#FBE7DE", color: "#b5651d", fontWeight: 600, fontSize: 13, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}><span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Warn size={16} color="#b5651d" /> {readErr}</span><button onClick={() => setReadErr("")} style={{ border: 0, background: "transparent", cursor: "pointer", color: "#b5651d", fontWeight: 700 }}>×</button></div>}
                 <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 10, flexWrap: "wrap" }}>
                   <button className="btn-demi" onClick={trySample} style={{ padding: "10px 18px", fontSize: 15 }}>▶ 用 Demi 示例稿试讲</button>
                   <button style={textButton} onClick={useSample}>或先放进预览 →</button>
@@ -95,7 +96,7 @@ export default function Create({ formId, tone, layout, error, onPickForm, onPick
               const lonely = deck.slides.length <= 1;
               return <div className="sketch r2" style={{ padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, background: lonely ? "#FBE7DE" : undefined }}>
                 <span><b>{deck.name}</b><br /><small style={{ color: "var(--ink-soft)" }}>{deck.slides.length} 页 · {how} · 已上传 {lonely ? "!" : "✓"}</small>{lonely && <><br /><small style={{ color: "#b5651d" }}>只识别到 1 页——若实为多页，建议用 section / .slide / .page 组织</small></>}</span>
-                <button className="chip" onClick={clearDeck} title="删除并重新上传" style={{ cursor: "pointer", flexShrink: 0, color: "#b5651d", borderColor: "#b5651d" }}>🗑 删除</button>
+                <button className="chip" onClick={clearDeck} title="删除并重新上传" style={{ cursor: "pointer", flexShrink: 0, color: "#b5651d", borderColor: "#b5651d", display: "inline-flex", alignItems: "center", gap: 6 }}><Trash size={14} color="#b5651d" /> 删除</button>
               </div>;
             })()}
           </Step>
@@ -106,7 +107,7 @@ export default function Create({ formId, tone, layout, error, onPickForm, onPick
             <div style={{ display: "grid", gap: 8 }}>{LAYOUTS.map(([id, name, desc]) => <button key={id} onClick={() => onPickLayout(id)} className="sketch r2" style={{ cursor: "pointer", padding: "9px 12px", textAlign: "left", background: layout === id ? "var(--orange-pale)" : "#fff", borderColor: layout === id ? "var(--orange-deep)" : "var(--ink)" }}><b>{name}</b><small style={{ display: "block", color: "var(--ink-soft)", marginTop: 2 }}>{desc}</small></button>)}</div>
           </Step>
           {error && <div style={{ color: "#a33", fontWeight: 600, fontSize: 13, marginBottom: 12 }}>{error}</div>}
-          <button className="btn-demi" disabled={!deck} onClick={() => onGenerate(deck)} style={{ width: "100%", justifyContent: "center", opacity: deck ? 1 : .45 }}>✨ 生成讲解 →</button>
+          <button className="btn-demi" disabled={!deck} onClick={() => onGenerate(deck)} style={{ width: "100%", justifyContent: "center", opacity: deck ? 1 : .45 }}><Sparkle size={18} color="#fff" /> 生成讲解 →</button>
         </aside>
         <section style={{ position: "relative", background: "var(--paper-2)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 30 }}>
           <div className="hand" style={{ position: "absolute", top: 20, left: 28, fontSize: 21, color: "var(--ink-soft)" }}>舞台预览 · 你的幻灯片是主角 ↓</div>
@@ -198,7 +199,7 @@ function SampleSite() {
   return (
     <div style={{ maxWidth: 720, margin: "0 auto", display: "grid", gap: 18 }}>
       <div id="dm-hero" style={{ ...card, textAlign: "center", padding: "40px 20px" }}>
-        <div style={{ fontSize: 30, fontWeight: 800 }}>星跳兔 🐰✨</div>
+        <div style={{ fontSize: 30, fontWeight: 800, display: "inline-flex", alignItems: "center", gap: 8 }}>星跳兔 <Rabbit size={28} /> <Sparkle size={22} color="var(--orange-deep)" /></div>
         <div style={{ color: "#7a6f64", marginTop: 6 }}>点一下就跳，看你能跳多高</div>
         <button id="dm-cta" style={{ marginTop: 22, padding: "14px 36px", fontSize: 18, fontWeight: 700, color: "#fff", background: "var(--orange)", border: "2.5px solid var(--ink)", borderRadius: 40, cursor: "pointer" }}>开始游戏</button>
       </div>
@@ -208,8 +209,8 @@ function SampleSite() {
       </div>
       <div id="dm-board" style={card}>
         <b>本周高手</b>
-        <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 2px", borderBottom: "1px dashed #d8cdbd" }}><span>🥇 跳跳虎</span><span>12,840</span></div>
-        <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 2px" }}><span>🥈 星之子</span><span>11,209</span></div>
+        <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 2px", borderBottom: "1px dashed #d8cdbd" }}><span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Medal size={16} rank={1} /> 跳跳虎</span><span>12,840</span></div>
+        <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 2px" }}><span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Medal size={16} rank={2} /> 星之子</span><span>11,209</span></div>
       </div>
     </div>
   );

@@ -138,6 +138,22 @@ button:focus-visible,input:focus-visible{ outline:3px solid var(--orange); outli
 .bob{ animation:bob 2.4s ease-in-out infinite; }
 .sway{ animation:sway 3s ease-in-out infinite; transform-origin:bottom center; }
 
+@keyframes spinRing{ from{ transform:rotate(0deg);} to{ transform:rotate(360deg);} }
+.loading-spinner{
+  display:inline-block; width:14px; height:14px;
+  border:2.4px solid var(--orange-pale);
+  border-top-color:var(--orange-deep);
+  border-radius:50%;
+  animation:spinRing .9s linear infinite;
+  vertical-align:middle;
+}
+@keyframes barStripes{ from{ background-position:0 0;} to{ background-position:20px 0;} }
+.loading-bar-active{
+  background-image:linear-gradient(90deg, var(--orange) 0%, var(--orange-deep) 50%, var(--orange) 100%);
+  background-size:20px 100%;
+  animation:barStripes 1s linear infinite;
+}
+
 @keyframes demiIn{ from{ transform:translateX(300px); opacity:0; } to{ transform:translateX(0); opacity:1; } }
 
 /* presenter liveliness — sway on the outer wrapper, bob on the inner while talking */

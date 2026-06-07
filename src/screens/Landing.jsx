@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { FormGlyph, HUMANS, PETS, CHIBI } from "../lib/characters.jsx";
 import { BlackCat, GrassTuft, WoodFloor } from "../lib/demi.jsx";
+import { loadVoices, pickVoice } from "../lib/tts.js";
 import PaletteDots from "../components/PaletteDots.jsx";
 
 const PICKS = [HUMANS[3], HUMANS[1], PETS[0], CHIBI[0], HUMANS[9]];
@@ -12,7 +13,7 @@ export default function Landing({ user, onStart, onDemo, onLibrary, onLogin, onL
       <header style={{ height: 64, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 40px" }}>
         <Brand />
         <div style={{ display: "flex", alignItems: "center", gap: 24, color: "var(--ink-soft)", fontWeight: 600 }}>
-          <button style={navButton} onClick={() => setInfo("how")}>怎么用</button><button style={navButton} onClick={() => setInfo("settings")}>设置</button>
+          <button style={navButton} onClick={() => setInfo("how")}>指南</button><button style={navButton} onClick={() => setInfo("settings")}>设置</button>
           {user ? <><span>你好，{user.name}</span><button className="btn-ghost" style={{ padding: "8px 18px" }} onClick={onLogout}>退出</button></> : <button className="btn-ghost" style={{ padding: "8px 18px" }} onClick={onLogin}>登录 / 注册</button>}
         </div>
       </header>
@@ -54,14 +55,54 @@ export default function Landing({ user, onStart, onDemo, onLibrary, onLogin, onL
         <p><b>① 上传 PPT 帮你讲</b>：传上 HTML 幻灯片，AI 生成逐页讲稿，点一次播放就自动朗读、连续翻页。</p>
         <p><b>② 嵌入网站帮你讲</b>：写好导览词、拿一段嵌入代码贴进你自己的网站，小人就能走到每个区块旁边指着讲解。</p>
         <button className="btn-demi" onClick={() => { setInfo(""); onStart(); }}>开始制作 →</button>
-      </> : <>
-        <h2 className="h-title">设置</h2>
-        <div style={{ margin: "14px 0 8px" }}><div style={{ fontWeight: 700, marginBottom: 10 }}>主页配色</div><PaletteDots /></div>
-        <p style={{ color: "var(--ink-soft)", fontSize: 14, marginTop: 16 }}>更多偏好（嵌入网站的默认形态、配音音色等）将随制作流程逐步开放。</p>
-        <button className="btn-ghost" onClick={() => setInfo("")} style={{ marginTop: 8 }}>完成</button>
-      </>}</div></div>}
+      </> : <SettingsPanel onDone={() => setInfo("")} />}</div></div>}
     </div>
   );
+}
+
+function SettingsPanel({ onDone }) {
+  const [voices, setVoices] = useState([]);
+  const [voiceName, setVoiceName] = useState(() => localStorage.getItem("demi_voice_name") || "");
+  const [aiVoice, setAiVoice] = useState(() => localStorage.getItem("demi_ai_voice") !== "0");
+
+  useEffect(() => {
+    loadVoices().then((all) => {
+      const chinese = all.filter((v) => /^zh|cmn/i.test(v.lang) || /中文|chinese|普通话/i.test(v.name));
+      const available = chinese.length ? chinese : all;
+      setVoices(available);
+      // 没存过偏好就把推荐音色记下来,Play 直接用。
+      if (!voiceName) {
+        const preferred = pickVoice(available);
+        if (preferred) { setVoiceName(preferred.name); localStorage.setItem("demi_voice_name", preferred.name); }
+      }
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const onPickVoice = (e) => { const n = e.target.value; setVoiceName(n); localStorage.setItem("demi_voice_name", n); };
+  const onToggleAi = () => { const v = !aiVoice; setAiVoice(v); localStorage.setItem("demi_ai_voice", v ? "1" : "0"); };
+
+  return <>
+    <h2 className="h-title">设置</h2>
+    <div style={{ margin: "14px 0 8px" }}>
+      <div style={{ fontWeight: 700, marginBottom: 10 }}>主页配色</div>
+      <PaletteDots />
+    </div>
+    <div style={{ margin: "18px 0 8px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+        <div style={{ fontWeight: 700 }}>AI 配音</div>
+        <button className="chip" onClick={onToggleAi} style={{ cursor: "pointer", background: aiVoice ? "var(--orange-pale)" : "#fff", borderColor: aiVoice ? "var(--orange-deep)" : "var(--ink)" }}>{aiVoice ? "已开启" : "已关闭"}</button>
+      </div>
+      <div style={{ fontSize: 13, color: "var(--ink-soft)", lineHeight: 1.5 }}>开启时讲解使用智谱云端自然语音；不可用时自动回退到浏览器音色。</div>
+    </div>
+    <div style={{ margin: "18px 0 8px" }}>
+      <div style={{ fontWeight: 700, marginBottom: 6 }}>浏览器回退音色</div>
+      <select className="field" value={voiceName} onChange={onPickVoice} style={{ width: "100%", padding: "8px 12px", fontSize: 14 }}>
+        {voices.length ? voices.map((v) => <option key={v.name} value={v.name}>{v.name}</option>) : <option value="">系统中文音色（加载中…）</option>}
+      </select>
+      <div style={{ fontSize: 13, color: "var(--ink-soft)", marginTop: 6 }}>AI 配音不可用时,用这把音色继续讲。</div>
+    </div>
+    <button className="btn-ghost" onClick={onDone} style={{ marginTop: 12 }}>完成</button>
+  </>;
 }
 const navButton = { border: 0, background: "transparent", color: "var(--ink-soft)", fontWeight: 700, cursor: "pointer" };
 

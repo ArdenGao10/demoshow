@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { FormGlyph, HUMANS, PETS, CHIBI, findForm, DEFAULT_FORM_ID } from "../lib/characters.jsx";
 import { formFrames } from "../lib/charFrames.jsx";
 import { start as demiStart, stop as demiStop } from "../lib/demiWidget.js";
+import { Sparkle, ArrowUp } from "../lib/icons.jsx";
 
 // 纯演示界面：进来只看不改，Demi 自动走一遍「制作界面」的各个区域，
 // 一步步告诉用户这里怎么传、那里怎么切换、最后怎么生成讲解。
@@ -19,7 +20,8 @@ const TOUR = [
 export default function Demo({ onBack, onStart }) {
   useEffect(() => {
     const frames = formFrames(findForm(DEFAULT_FORM_ID)); // 尾尾
-    const t = setTimeout(() => demiStart(TOUR, { auto: true, frames }), 500);
+    // 默认不自动开讲：让用户自己点底部播放按钮,小人和讲解同时启动,体验更可控。
+    const t = setTimeout(() => demiStart(TOUR, { auto: false, frames }), 500);
     return () => { clearTimeout(t); demiStop(); };
   }, []);
 
@@ -54,7 +56,7 @@ export default function Demo({ onBack, onStart }) {
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 }}>
             <section id="demo-upload" className="sketch-dash" style={{ padding: 22, textAlign: "center", background: "#fff" }}>
-              <div style={{ fontSize: 26 }}>⬆</div>
+              <div style={{ display: "flex", justifyContent: "center", marginBottom: 4 }}><ArrowUp size={26} color="var(--ink-soft)" /></div>
               <b>拖 HTML 幻灯片到这里</b>
               <div style={{ fontSize: 13, color: "var(--ink-soft)", marginTop: 4 }}>上传 PPT 模式</div>
             </section>
@@ -70,7 +72,7 @@ export default function Demo({ onBack, onStart }) {
             {["轻松亲切", "专业稳重", "元气满满"].map((t, i) => <span key={t} className="chip" style={{ background: i === 0 ? "var(--orange-pale)" : "#fff", borderColor: i === 0 ? "var(--orange-deep)" : "var(--ink)" }}>{t}</span>)}
           </section>
 
-          <button id="demo-generate" className="btn-demi" style={{ justifyContent: "center", pointerEvents: "none" }}>✨ 生成讲解 →</button>
+          <button id="demo-generate" className="btn-demi" style={{ justifyContent: "center", pointerEvents: "none" }}><Sparkle size={18} color="#fff" /> 生成讲解 →</button>
         </div>
       </main>
     </div>

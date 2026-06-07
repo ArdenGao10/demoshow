@@ -20,7 +20,7 @@ export default function Play({ form, deck, scripts, layout: initialLayout, onExi
   const [mouthOpen, setMouthOpen] = useState(false);
   const [preparing, setPreparing] = useState(false); // 已点播放、正在取/合成云端语音（声音还没到位）
   const [layout, setLayout] = useState(initialLayout || "corner");
-  const [aiVoice, setAiVoice] = useState(true); // 优先用智谱云端配音，失败自动回退浏览器语音
+  const [aiVoice, setAiVoice] = useState(() => localStorage.getItem("demi_ai_voice") !== "0"); // 默认开;由主页设置统一管理
   const [voiceErr, setVoiceErr] = useState("");
   const autoRef = useRef(false);
   const startedPageRef = useRef(-1);
@@ -36,7 +36,9 @@ export default function Play({ form, deck, scripts, layout: initialLayout, onExi
     loadVoices().then((all) => {
       const chinese = all.filter((v) => /^zh|cmn/i.test(v.lang) || /中文|chinese|普通话/i.test(v.name));
       const available = chinese.length ? chinese : all;
-      const preferred = pickVoice(available);
+      const savedName = localStorage.getItem("demi_voice_name");
+      const saved = savedName ? available.find((v) => v.name === savedName) : null;
+      const preferred = saved || pickVoice(available);
       setVoices(available);
       setVoiceIndex(Math.max(0, available.indexOf(preferred)));
     });
@@ -206,29 +208,11 @@ export default function Play({ form, deck, scripts, layout: initialLayout, onExi
     narrate();
   };
 
-  const switchVoice = (e) => {
-    const wasPlaying = playing;
-    reqIdRef.current++;
-    cancel();
-    stopAudio();
-    setPreparing(false);
-    setPlaying(false);
-    setVoiceIndex(Number(e.target.value));
-    if (wasPlaying) {
-      startedPageRef.current = -1;
-      autoRef.current = true;
-    }
-  };
-
   const positions = layoutStyles(layout);
   return <div className="screen" style={{ display: "flex", flexDirection: "column", background: layout === "pip" ? "#2b2622" : "var(--paper)" }}>
     <header style={{ height: 52, flex: "0 0 52px", display: "flex", alignItems: "center", gap: 12, padding: "0 18px", borderBottom: "2px solid rgba(59,51,46,.12)", background: "var(--paper)" }}>
       <b><span style={{ color: "var(--orange-deep)" }}>✦ Demi</span><span style={{ color: "var(--ink-soft)" }}> · {deck?.name} · {form?.name}</span></b>
       <div style={{ display: "flex", gap: 6, marginLeft: "auto" }}>{Object.entries(LAYOUT_LABELS).map(([id, label]) => <button key={id} className="chip" onClick={() => setLayout(id)} style={{ cursor: "pointer", background: layout === id ? "var(--orange-pale)" : "#fff" }}>{label}</button>)}</div>
-      <button className="chip" onClick={() => setAiVoice((v) => !v)} title="智谱 cogtts 自然语音；关闭则用浏览器语音" style={{ cursor: "pointer", background: aiVoice ? "var(--orange-pale)" : "#fff" }}>AI配音 {aiVoice ? "开" : "关"}</button>
-      <select className="field" aria-label={aiVoice ? "回退音色" : "讲解音色"} title={aiVoice ? "AI 配音不可用时的回退音色" : "浏览器讲解音色"} value={voiceIndex} onChange={switchVoice} style={{ width: 138, padding: "6px 10px", fontSize: 12, opacity: aiVoice ? 0.6 : 1 }}>
-        {voices.length ? voices.map((v, i) => <option key={`${v.name}-${i}`} value={i}>{v.name}</option>) : <option>系统中文音色</option>}
-      </select>
       <button className="btn-ghost" style={{ padding: "5px 14px", fontSize: 13 }} onClick={() => { cancel(); stopAudio(); onExit(); }}>退出</button>
     </header>
     <main className="speckle" style={{ flex: 1, position: "relative", background: layout === "pip" ? "#2b2622" : "var(--paper-2)", overflow: "hidden", minHeight: 0 }}>

@@ -40,6 +40,30 @@ function injectOnce() {
     #demi-bar button.rate{width:auto;padding:0 12px;border-radius:18px;font-weight:700;}
     #demi-bar button:disabled{opacity:.35;cursor:default;}
     #demi-bar .step{min-width:42px;text-align:center;font-weight:600;}
+    #demi-play.hint{animation:demiPlayPulse 1.4s ease-in-out infinite;}
+    @keyframes demiPlayPulse{
+      0%,100%{box-shadow:0 0 0 0 rgba(232,145,91,.7);transform:scale(1);}
+      50%{box-shadow:0 0 0 14px rgba(232,145,91,0);transform:scale(1.08);}
+    }
+    #demi-play-hint{
+      position:absolute;bottom:calc(100% + 12px);left:50%;transform:translateX(-50%);
+      white-space:nowrap;font:600 13px -apple-system,system-ui,"PingFang SC","Microsoft YaHei",sans-serif;
+      color:#3B332E;background:#FBF3E4;border:2.4px solid #3B332E;border-radius:18px;
+      padding:7px 14px;box-shadow:0 5px 14px rgba(0,0,0,.18);pointer-events:none;
+      animation:demiHintBob 1.1s ease-in-out infinite;
+    }
+    #demi-play-hint:after{
+      content:"";position:absolute;left:50%;bottom:-9px;margin-left:-7px;
+      border:7px solid transparent;border-top-color:#3B332E;border-bottom:0;
+    }
+    #demi-play-hint:before{
+      content:"";position:absolute;left:50%;bottom:-6px;margin-left:-5px;
+      border:5px solid transparent;border-top-color:#FBF3E4;border-bottom:0;z-index:1;
+    }
+    @keyframes demiHintBob{
+      0%,100%{transform:translateX(-50%) translateY(0);}
+      50%{transform:translateX(-50%) translateY(-5px);}
+    }
   `;
   document.head.appendChild(css);
 }
@@ -140,11 +164,27 @@ function buildDom() {
   stepLabel = barEl.querySelector("#demi-step");
   btnPlay = barEl.querySelector("#demi-play");
   btnRate = barEl.querySelector("#demi-rate");
-  barEl.querySelector("#demi-prev").onclick = () => { auto = false; go(idx - 1); };
-  barEl.querySelector("#demi-next").onclick = () => { auto = false; go(idx + 1); };
+  btnPlay.style.position = "relative"; // 让 #demi-play-hint 能挂在它头顶
+  barEl.querySelector("#demi-prev").onclick = () => { auto = false; clearPlayHint(); go(idx - 1); };
+  barEl.querySelector("#demi-next").onclick = () => { auto = false; clearPlayHint(); go(idx + 1); };
   barEl.querySelector("#demi-close").onclick = stop;
   btnPlay.onclick = togglePlay;
   btnRate.onclick = cycleRate;
+}
+
+function showPlayHint() {
+  if (!btnPlay) return;
+  btnPlay.classList.add("hint");
+  if (btnPlay.querySelector("#demi-play-hint")) return;
+  const h = document.createElement("div");
+  h.id = "demi-play-hint";
+  h.textContent = "点这里开始 ↓";
+  btnPlay.appendChild(h);
+}
+function clearPlayHint() {
+  if (!btnPlay) return;
+  btnPlay.classList.remove("hint");
+  btnPlay.querySelector("#demi-play-hint")?.remove();
 }
 
 // 切换倍速；正在播的云端音频立即变速（保持音调）。
@@ -260,6 +300,7 @@ function pauseSpeech() {
 
 function togglePlay() {
   if (auto) { auto = false; if (btnPlay) btnPlay.textContent = "▶"; pauseSpeech(); return; }
+  clearPlayHint();
   auto = true; btnPlay.textContent = "❚❚";
   if (idx < 0) { go(0); return; }
   // 续播：云端音频没放完就接着放；否则恢复/重讲当前站。
@@ -289,7 +330,13 @@ export function start(tourSteps, opts = {}) {
   buildDom();
   document.addEventListener("visibilitychange", onVisibility);
   charEl.style.transform = `translate(${window.innerWidth - 130}px, ${window.innerHeight - 200}px)`;
-  setTimeout(() => go(0), 300);
+  if (auto) {
+    if (btnPlay) btnPlay.textContent = "❚❚";
+    setTimeout(() => go(0), 300);
+  } else {
+    // 不自动开讲——给播放按钮挂个引导,等用户自己点。
+    setTimeout(showPlayHint, 500);
+  }
 }
 
 export function stop() {

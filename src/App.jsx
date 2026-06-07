@@ -109,7 +109,7 @@ export default function App() {
       <SketchDefs />
       {route === "landing" && <Landing user={user} onStart={() => go(user ? "create" : "login")} onDemo={() => go("demo")} onLibrary={() => { setLibFrom("landing"); go("library"); }} onLogin={() => go("login")} onLogout={handleLogout} />}
       {route === "demo" && <Demo onBack={() => go("landing")} onStart={() => go(user ? "create" : "login")} />}
-      {route === "login" && <Login onAuth={(nextUser) => { setUser(nextUser); go("create"); }} onBack={() => go("landing")} />}
+      {route === "login" && <Login onAuth={(nextUser) => { setUser(nextUser); go("landing"); }} onBack={() => go("landing")} />}
       {route === "create" && (
         <Create
           formId={formId}
