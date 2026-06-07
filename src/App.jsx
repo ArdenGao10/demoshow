@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { SketchDefs } from "./lib/demi.jsx";
 import { findForm, DEFAULT_FORM_ID } from "./lib/characters.jsx";
 import { generateScripts } from "./lib/glm.js";
+import { supabase, supabaseEnabled, userFromSession } from "./lib/supabase.js";
 import Landing from "./screens/Landing.jsx";
 import Login from "./screens/Login.jsx";
 import Create from "./screens/Create.jsx";
@@ -25,13 +26,32 @@ export default function App() {
 
   const form = findForm(formId);
 
-  // restore palette on boot
+  // restore palette + create-page selections + user session on boot
   useEffect(() => {
     const p = localStorage.getItem("demi_palette") || "warm";
     document.documentElement.setAttribute("data-palette", p);
-    const token = localStorage.getItem("demi_token");
-    if (token) fetch("/api/auth/me", { headers: { Authorization: `Bearer ${token}` } }).then((r) => r.ok ? r.json() : Promise.reject()).then((d) => setUser(d.user)).catch(() => localStorage.removeItem("demi_token"));
+    const savedForm = localStorage.getItem("demi_formId");
+    if (savedForm && findForm(savedForm)) setFormId(savedForm);
+    const savedTone = localStorage.getItem("demi_tone");
+    if (savedTone) setTone(savedTone);
+    const savedLayout = localStorage.getItem("demi_layout");
+    if (savedLayout === "corner" || savedLayout === "runway" || savedLayout === "pip") setLayout(savedLayout);
+
+    if (supabaseEnabled) {
+      supabase.auth.getSession().then(({ data }) => setUser(userFromSession(data.session)));
+      const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => setUser(userFromSession(session)));
+      return () => sub?.subscription?.unsubscribe?.();
+    }
+    // 演示模式：从 localStorage 还原本地 user，刷新不掉。
+    try {
+      const raw = localStorage.getItem("demi_local_user");
+      if (raw) setUser(JSON.parse(raw));
+    } catch { /* ignore */ }
   }, []);
+
+  useEffect(() => { localStorage.setItem("demi_formId", formId); }, [formId]);
+  useEffect(() => { localStorage.setItem("demi_tone", tone); }, [tone]);
+  useEffect(() => { localStorage.setItem("demi_layout", layout); }, [layout]);
 
   const go = useCallback((r) => {
     setError("");
@@ -67,10 +87,27 @@ export default function App() {
     [form, tone]
   );
 
+  const handleLogout = useCallback(async () => {
+    if (supabaseEnabled) await supabase.auth.signOut().catch(() => {});
+    localStorage.removeItem("demi_local_user");
+    localStorage.removeItem("demi_token");
+    // 退出后把草稿一并清掉，下一个登录的人从干净状态开始。
+    localStorage.removeItem("demi_draft_deck");
+    localStorage.removeItem("demi_formId");
+    localStorage.removeItem("demi_tone");
+    localStorage.removeItem("demi_layout");
+    setUser(null);
+    setDeck(null);
+    setScripts(null);
+    setFormId(DEFAULT_FORM_ID);
+    setTone("轻松亲切");
+    setLayout("corner");
+  }, []);
+
   return (
     <>
       <SketchDefs />
-      {route === "landing" && <Landing user={user} onStart={() => go(user ? "create" : "login")} onDemo={() => go("demo")} onLibrary={() => { setLibFrom("landing"); go("library"); }} onLogin={() => go("login")} onLogout={() => { localStorage.removeItem("demi_token"); setUser(null); }} />}
+      {route === "landing" && <Landing user={user} onStart={() => go(user ? "create" : "login")} onDemo={() => go("demo")} onLibrary={() => { setLibFrom("landing"); go("library"); }} onLogin={() => go("login")} onLogout={handleLogout} />}
       {route === "demo" && <Demo onBack={() => go("landing")} onStart={() => go(user ? "create" : "login")} />}
       {route === "login" && <Login onAuth={(nextUser) => { setUser(nextUser); go("create"); }} onBack={() => go("landing")} />}
       {route === "create" && (

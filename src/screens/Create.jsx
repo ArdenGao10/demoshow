@@ -14,20 +14,33 @@ const LAYOUTS = [
 
 export default function Create({ formId, tone, layout, error, onPickForm, onPickTone, onPickLayout, onOpenLibrary, onGenerate, onBack }) {
   const inputRef = useRef(null);
-  const [deck, setDeck] = useState(null);
+  const [deck, setDeck] = useState(() => {
+    try {
+      const raw = localStorage.getItem("demi_draft_deck");
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
+  });
   const [reading, setReading] = useState(false);
+  const [readErr, setReadErr] = useState("");
   const [mode, setMode] = useState("ppt"); // ppt | embed
   const form = findForm(formId);
+
+  useEffect(() => {
+    if (!deck) { localStorage.removeItem("demi_draft_deck"); return; }
+    try { localStorage.setItem("demi_draft_deck", JSON.stringify(deck)); }
+    catch { /* deck too large for localStorage — silently skip persistence */ }
+  }, [deck]);
 
   const loadFile = async (file) => {
     if (!file) return;
     setReading(true);
+    setReadErr("");
     try {
       const parsed = parseDeckHtml(await file.text(), file.name);
       if (!parsed.slides.length) throw new Error("没有识别到幻灯片页面");
       setDeck(parsed);
     } catch (err) {
-      window.alert(err.message || "HTML 读取失败");
+      setReadErr(err.message || "HTML 读取失败");
     } finally { setReading(false); }
   };
   const buildSample = () => {
@@ -48,7 +61,7 @@ export default function Create({ formId, tone, layout, error, onPickForm, onPick
             <button key={id} onClick={() => { demiStop(); setMode(id); }} className="sketch r2" style={{ cursor: "pointer", padding: "8px 16px", fontWeight: 700, background: mode === id ? "var(--orange-pale)" : "#fff", borderColor: mode === id ? "var(--orange-deep)" : "var(--ink)" }}>{label}</button>
           ))}
         </div>
-        <span className="hand" style={{ fontSize: 19, color: "var(--ink-soft)" }}>草稿已保存 ✓</span>
+        <span className="hand" style={{ fontSize: 19, color: "var(--ink-soft)" }}>{deck ? "草稿已保存 ✓" : "选个形象、传上内容 →"}</span>
       </header>
       {mode === "embed" ? (
         <EmbedPanel form={form} formId={formId} onPickForm={onPickForm} onOpenLibrary={onOpenLibrary} />
@@ -68,6 +81,7 @@ export default function Create({ formId, tone, layout, error, onPickForm, onPick
                 <div className="sketch-dash" role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") inputRef.current?.click(); }} onClick={() => inputRef.current?.click()} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); loadFile(e.dataTransfer.files?.[0]); }} style={{ padding: 18, textAlign: "center", cursor: "pointer" }}>
                   <div style={{ fontSize: 26 }}>⬆</div><b>{reading ? "正在读取…" : "拖到这里，或点击上传"}</b>
                 </div>
+                {readErr && <div className="sketch r2" style={{ marginTop: 10, padding: "10px 14px", background: "#FBE7DE", color: "#b5651d", fontWeight: 600, fontSize: 13, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}><span>⚠ {readErr}</span><button onClick={() => setReadErr("")} style={{ border: 0, background: "transparent", cursor: "pointer", color: "#b5651d", fontWeight: 700 }}>×</button></div>}
                 <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 10, flexWrap: "wrap" }}>
                   <button className="btn-demi" onClick={trySample} style={{ padding: "10px 18px", fontSize: 15 }}>▶ 用 Demi 示例稿试讲</button>
                   <button style={textButton} onClick={useSample}>或先放进预览 →</button>
@@ -135,7 +149,8 @@ function EmbedPanel({ form, formId, onPickForm, onOpenLibrary }) {
   const lineArr = lines.split("\n").map((s) => s.trim()).filter(Boolean);
   const steps = lineArr.map((line, i) => ({ selector: SAMPLE_SITES[i % SAMPLE_SITES.length].selector, line }));
 
-  const snippet = `<script src="https://your-cdn/demi-widget.js"></script>
+  const widgetUrl = (typeof window !== "undefined" ? window.location.origin : "") + "/demi-widget.js";
+  const snippet = `<script src="${widgetUrl}"></script>
 <script>
   DemiTour.start([
 ${lineArr.map((l, i) => `    { selector: "#换成你的元素${i + 1}", line: ${JSON.stringify(l)} },`).join("\n")}
@@ -143,6 +158,7 @@ ${lineArr.map((l, i) => `    { selector: "#换成你的元素${i + 1}", line: ${
 <\/script>`;
 
   const tryHere = () => {
+    if (playing) { demiStop(); setPlaying(false); return; }
     setPlaying(true);
     demiStart(steps, { auto: true, frames: formFrames(form), onDone: () => setPlaying(false) });
   };
@@ -161,7 +177,7 @@ ${lineArr.map((l, i) => `    { selector: "#换成你的元素${i + 1}", line: ${
         </Step>
         <Step title="② 写好导览词" hint="一行一句，小人会一站一站走过去讲（先用示例网站试讲）">
           <textarea value={lines} onChange={(e) => setLines(e.target.value)} rows={7} className="sketch r2" style={{ width: "100%", resize: "vertical", padding: "10px 12px", font: "14px/1.6 inherit", color: "var(--ink)", background: "#fff" }} />
-          <button className="btn-demi" disabled={!lineArr.length} onClick={tryHere} style={{ width: "100%", justifyContent: "center", marginTop: 12, opacity: lineArr.length ? 1 : .45 }}>{playing ? "▶ 试讲中…（右侧观看）" : "▶ 在示例网站里试讲一遍"}</button>
+          <button className="btn-demi" disabled={!lineArr.length} onClick={tryHere} style={{ width: "100%", justifyContent: "center", marginTop: 12, opacity: lineArr.length ? 1 : .45 }}>{playing ? "⏹ 停止试讲" : "▶ 在示例网站里试讲一遍"}</button>
         </Step>
         <Step title="③ 拿到嵌入代码" hint="粘到你自己网站的 HTML 里，把 selector 换成你的真实元素即可">
           <pre className="sketch r2" style={{ margin: 0, padding: "12px 14px", background: "#2b2622", color: "#f3e9d8", fontSize: 12, lineHeight: 1.5, overflowX: "auto", whiteSpace: "pre" }}>{snippet}</pre>

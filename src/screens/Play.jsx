@@ -44,6 +44,13 @@ export default function Play({ form, deck, scripts, layout: initialLayout, onExi
     return () => { stopAudio(); cancel(); };
   }, []);
 
+  // 配音错误提示 6 秒自动消失（绝大多数错误是单次抖动，没必要整场挂着）。
+  useEffect(() => {
+    if (!voiceErr) return;
+    const id = setTimeout(() => setVoiceErr(""), 6000);
+    return () => clearTimeout(id);
+  }, [voiceErr]);
+
   const stopAudio = () => {
     const a = audioRef.current;
     if (!a) return;
@@ -226,7 +233,7 @@ export default function Play({ form, deck, scripts, layout: initialLayout, onExi
     </header>
     <main className="speckle" style={{ flex: 1, position: "relative", background: layout === "pip" ? "#2b2622" : "var(--paper-2)", overflow: "hidden", minHeight: 0 }}>
       <div className="chip" style={{ position: "absolute", left: 24, top: 20, zIndex: 6, background: layout === "pip" ? "rgba(255,255,255,.92)" : "#fff" }}>第 {String(page + 1).padStart(2, "0")} / {String(count).padStart(2, "0")} 页</div>
-      {voiceErr && <div className="chip" style={{ position: "absolute", right: 24, top: 20, zIndex: 6, maxWidth: 320, background: "#FBE7DE", color: "#b5651d", whiteSpace: "normal", lineHeight: 1.4 }}>{voiceErr}</div>}
+      {voiceErr && <div className="chip" style={{ position: "absolute", right: 24, top: 20, zIndex: 6, maxWidth: 320, background: "#FBE7DE", color: "#b5651d", whiteSpace: "normal", lineHeight: 1.4, display: "flex", alignItems: "flex-start", gap: 8 }}><span style={{ flex: 1 }}>{voiceErr}</span><button onClick={() => setVoiceErr("")} style={{ border: 0, background: "transparent", cursor: "pointer", color: "#b5651d", fontWeight: 700, padding: 0, lineHeight: 1 }} aria-label="关闭">×</button></div>}
 
       {/* runway: full-width wood floor behind the presenter */}
       {layout === "runway" && <WoodFloor width={1280} height={56} style={{ width: "100%", position: "absolute", left: 0, bottom: 18, zIndex: 1 }} />}
