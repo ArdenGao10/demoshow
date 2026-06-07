@@ -100,6 +100,9 @@
       #demi-edit-list .stop .row1 code{flex:1;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
         font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#3B332E;}
       #demi-edit-list .stop .row1 .del{cursor:pointer;border:0;background:transparent;color:#b5651d;font-weight:700;font-size:14px;padding:0 4px;}
+      #demi-edit-list .stop .row1 .act{cursor:pointer;border:1.5px solid #d8cdbd;background:#fff;color:#7a6f64;
+        border-radius:10px;padding:1px 7px;font-size:11px;flex-shrink:0;font-weight:600;}
+      #demi-edit-list .stop .row1 .act.on{background:${C.accent};color:#fff;border-color:${INK};}
       #demi-edit-list .stop textarea{width:100%;resize:vertical;min-height:42px;border:1.5px solid #d8cdbd;border-radius:6px;
         padding:6px 8px;font:13px/1.45 inherit;color:#3B332E;background:#fdf8ed;}
       #demi-edit-list .stop textarea:focus{outline:none;border-color:${C.accent};}
@@ -275,7 +278,21 @@
     setTimeout(() => { charEl.classList.remove("walking"); setPose("point", "smile"); then && then(); }, 950);
   }
 
+  // 等下一站的 selector 在 DOM 里出现(被点击触发了路由/弹窗后),最多等 4s
+  function waitForSelector(sel, timeout, cb) {
+    if (!sel) { cb(); return; }
+    const t0 = Date.now();
+    const tick = () => {
+      if (!charEl) return; // tour stopped externally
+      if (document.querySelector(sel)) { cb(); return; }
+      if (Date.now() - t0 > timeout) { cb(); return; }
+      setTimeout(tick, 120);
+    };
+    tick();
+  }
+
   function go(i) {
+    if (!charEl) return;
     if (i < 0 || i >= steps.length) return;
     idx = i;
     stepLabel.textContent = `${idx + 1}/${steps.length}`;
@@ -288,15 +305,29 @@
     }
     el.scrollIntoView({ behavior: "smooth", block: "center" });
     setTimeout(() => {
+      if (!charEl) return;
       moveTo(el, () => {
         bubbleEl.textContent = step.line;
         bubbleEl.classList.add("show");
         speak(step.line, () => {
-          if (auto && idx < steps.length - 1) setTimeout(() => go(idx + 1), 350);
-          else if (idx >= steps.length - 1) {
+          // 讲完了。看这一站要不要替用户点一下,再决定怎么进下一站
+          const isLast = idx >= steps.length - 1;
+          if (isLast) {
+            // 最后一站:如果挂了 click 动作,讲完点一下再收尾
+            if (step.action === "click") { try { el.click(); } catch (e) {} }
             auto = false;
             btnPlay.textContent = "▶";
             if (typeof onDoneCb === "function") { const cb = onDoneCb; onDoneCb = null; setTimeout(cb, 200); }
+            return;
+          }
+          if (!auto) return;
+          const nextSel = steps[idx + 1] && steps[idx + 1].selector;
+          if (step.action === "click") {
+            try { el.click(); } catch (e) {}
+            // 等下一站元素在新页面/弹窗里出现再走过去,免得扑空
+            waitForSelector(nextSel, 4000, () => setTimeout(() => go(idx + 1), 350));
+          } else {
+            setTimeout(() => go(idx + 1), 350);
           }
         });
       });
@@ -459,10 +490,11 @@
     panel.innerHTML = `
       <div class="head">
         <b>✦ 编辑导览</b>
+        <button id="demi-ed-browse" title="切换:点元素加站 / 浏览页面(操作你的游戏)">🎯 点元素加站</button>
         <button id="demi-ed-preview" title="预览整段导览">▶ 预览</button>
         <button id="demi-ed-close" title="退出编辑模式">✕</button>
       </div>
-      <div class="tip" id="demi-ed-tip">把鼠标移到页面上 → 点击任意元素 → 添加一站</div>
+      <div class="tip" id="demi-ed-tip">点元素 = 加一站。需要点游戏按钮换场景? 右上切到「🖱 浏览」。</div>
       <div id="demi-edit-list"></div>
       <div class="foot">
         <button id="demi-ed-ai" class="primary">✨ AI 帮我写讲解词</button>
@@ -481,6 +513,7 @@
     panel.querySelector("#demi-ed-export").onclick = exportEditSnippet;
     panel.querySelector("#demi-ed-link").onclick = exportPlayLink;
     panel.querySelector("#demi-ed-ai").onclick = aiWriteLines;
+    panel.querySelector("#demi-ed-browse").onclick = toggleBrowseMode;
     renderEditList();
   }
 
@@ -495,10 +528,12 @@
     edit.steps.forEach((s, i) => {
       const row = document.createElement("div");
       row.className = "stop";
+      const actOn = s.action === "click";
       row.innerHTML = `
         <div class="row1">
           <span class="num">${i + 1}</span>
           <code title="${escapeAttr(s.selector)}">${escapeHtml(s.selector)}</code>
+          <button class="act ${actOn ? "on" : ""}" data-i="${i}" title="开:讲完后让 Demi 点一下这个元素,再去下一站">✋ 讲完点一下</button>
           <button class="del" data-i="${i}" title="删除这一站">✕</button>
         </div>
         <textarea data-i="${i}" placeholder="这里写讲解词……">${escapeHtml(s.line || "")}</textarea>`;
@@ -519,12 +554,35 @@
         renderEditList();
       };
     });
+    list.querySelectorAll(".act").forEach(b => {
+      b.onclick = e => {
+        const i = +e.currentTarget.dataset.i;
+        edit.steps[i].action = edit.steps[i].action === "click" ? undefined : "click";
+        saveDraft();
+        renderEditList();
+      };
+    });
   }
   function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
   function escapeAttr(s) { return escapeHtml(s); }
 
+  function toggleBrowseMode() {
+    if (!edit) return;
+    edit.browse = !edit.browse;
+    document.documentElement.classList.toggle("demi-edit-armed", !edit.browse);
+    const btn = document.getElementById("demi-ed-browse");
+    if (btn) btn.textContent = edit.browse ? "🖱 浏览中,点回 🎯" : "🎯 点元素加站";
+    const hr = document.getElementById("demi-edit-hover");
+    if (hr && edit.browse) hr.style.display = "none";
+    const tip = document.getElementById("demi-ed-tip");
+    if (tip) tip.textContent = edit.browse
+      ? "现在点击会照常传给你的游戏。换好场景再切回 🎯,继续点元素加站。"
+      : "点元素 = 加一站。需要点游戏按钮换场景? 右上切到「🖱 浏览」。";
+  }
+
   function onEditHover(e) {
     if (!edit) return;
+    if (edit.browse) return; // 浏览模式不画 hover 框
     const t = document.elementFromPoint(e.clientX, e.clientY);
     if (!t || isOwnNode(t)) {
       const hr = document.getElementById("demi-edit-hover");
@@ -553,6 +611,8 @@
     // 编辑面板内部的点击照常处理，不抓
     if (t.closest && t.closest("#demi-edit-panel")) return;
     if (isOwnNode(t)) return;
+    // 浏览模式:点击照常传给游戏,不加站
+    if (edit.browse) return;
     e.preventDefault();
     e.stopPropagation();
     const sel = genSelector(t);
@@ -686,7 +746,11 @@
     if (!valid.length) { flashTip("还没有可生成的站点"); return; }
     // 用当前页面的网址当目标(去掉 #demi-edit)
     const targetUrl = location.origin + location.pathname + location.search;
-    const link = encodePlayLink(targetUrl, valid.map(s => ({ selector: s.selector, line: s.line.trim() })), { name: edit.name });
+    const link = encodePlayLink(targetUrl, valid.map(s => {
+      const out = { selector: s.selector, line: s.line.trim() };
+      if (s.action === "click") out.action = "click";
+      return out;
+    }), { name: edit.name });
     const box = document.getElementById("demi-ed-snippet");
     if (box) { box.textContent = link; box.style.display = "block"; }
     try {
@@ -699,7 +763,11 @@
     const valid = edit.steps.filter(s => s.selector && s.line && s.line.trim());
     if (!valid.length) { flashTip("还没有可导出的站点"); return; }
     const widgetUrl = (location.origin || "") + "/demi-widget.js";
-    const stepsLines = valid.map(s => `    { selector: ${JSON.stringify(s.selector)}, line: ${JSON.stringify(s.line.trim())} },`).join("\n");
+    const stepsLines = valid.map(s => {
+      const parts = [`selector: ${JSON.stringify(s.selector)}`, `line: ${JSON.stringify(s.line.trim())}`];
+      if (s.action === "click") parts.push(`action: "click"`);
+      return `    { ${parts.join(", ")} },`;
+    }).join("\n");
     const snippet = `<!-- Demi 导览 - 粘到 </body> 之前 -->
 <script src="${widgetUrl}"></script>
 <script>
