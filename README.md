@@ -80,10 +80,9 @@ Landing
 
 ### Login / Register
 
-- 注册和登录使用真实服务端接口。
-- 密码使用 `scrypt` 哈希后保存，不能明文保存。
-- 登录令牌保存在浏览器 `localStorage` 中。
-- 当前用户数据持久化在 `server/data/users.json`，此实现适合本地演示，不是生产级数据库。
+- 账号系统走 Supabase Auth（前端直连，配置 `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY` 即启用）。
+- 未配置 Supabase 时回落到本地演示登录（点击即进，用户只存 `localStorage`）。
+- 服务端不保存任何用户数据。
 
 ### Create
 
@@ -114,9 +113,10 @@ Landing
 ### 服务端
 
 - Express
-- 智谱 GLM 代理接口
-- 本地 JSON 用户存储
-- HMAC 登录令牌
+- 智谱 GLM 代理接口（讲稿、导览、agent 决策、TTS）
+- 花钱端点按 IP 限流（`RATE_LIMIT_PER_MIN`，默认 20/分钟）
+- widget 跨域白名单（`WIDGET_ALLOWED_ORIGINS`，留空全开）
+- TTS 音频缓存（内存 LRU + 磁盘，同一段讲稿只付费合成一次）
 
 ### 关键文件
 
@@ -130,7 +130,10 @@ Landing
 | `src/lib/tts.js` | Web Speech TTS 封装 |
 | `src/lib/characters.jsx` | 人物、宠物、Q 版角色素材库 |
 | `src/lib/glm.js` | 前端 GLM 请求客户端 |
-| `server/index.js` | 登录注册、GLM 代理、本地讲稿兜底 |
+| `server/index.js` | GLM 代理、TTS、限流/CORS 接线、本地讲稿兜底 |
+| `server/lib/` | 限流器、Origin 白名单、TTS 缓存（均有单测） |
+| `public/demi-widget.js` | 可嵌入第三方网站的导览 widget（canonical 源） |
+| `scripts/release-widget.mjs` | 生成版本化 widget 副本 + SRI（`npm run build` 自动跑） |
 | `design/` | 原始设计稿和三种播放形态参考 |
 
 ## HTML 幻灯片约定
@@ -172,7 +175,8 @@ cp .env.example .env
 ZHIPU_API_KEY=你的智谱Key
 GLM_MODEL=glm-4-flash
 PORT=8787
-TOKEN_SECRET=生产环境必须修改
+RATE_LIMIT_PER_MIN=20
+WIDGET_ALLOWED_ORIGINS=
 ```
 
 配置 Key 后，服务端会请求智谱 GLM 生成逐页讲稿。
@@ -188,23 +192,29 @@ TOKEN_SECRET=生产环境必须修改
 
 ## 登录注册说明
 
-当前接口：
+账号系统完全走 Supabase Auth：前端用 `@supabase/supabase-js` 直连，服务端不保存用户。
+在 `.env` 配置 `VITE_SUPABASE_URL` 和 `VITE_SUPABASE_ANON_KEY` 即启用真账号；
+未配置时回落到本地演示登录（点击即进，仅存 `localStorage`）。
 
-```text
-POST /api/auth/register
-POST /api/auth/login
-GET  /api/auth/me
-```
+旧的 `/api/auth/*` 本地 JSON 账号系统已删除（它在 Vercel serverless 上本来就无法持久化）。
 
-本地账号保存在：
+## 防刷与缓存
 
-```text
-server/data/users.json
-```
+所有会消耗智谱余额的端点（`/api/generate`、`/api/tts`、`/api/generate-tour`、`/api/plan-tour`、`/api/agent-step`）：
 
-该文件已加入 `.gitignore`。
+- 按来源 IP 限流，`RATE_LIMIT_PER_MIN` 控制（默认 20/分钟），超限返回 429 + `Retry-After`。
+- widget 跨域端点支持 `WIDGET_ALLOWED_ORIGINS` 白名单（逗号分隔 Origin）；留空全开方便试用，**正式商用必须收紧到客户域名**。
+- `/api/tts` 带两层缓存（内存 LRU + 磁盘 `TTS_CACHE_DIR`，默认系统临时目录）：同一段（模型+音色+文本）只付费合成一次，响应头 `X-Demi-Cache: hit|miss` 可观察。
 
-生产化之前需要替换为正式数据库、完善错误处理、速率限制、HTTPS、令牌撤销和密码重置。
+## Widget 版本化
+
+`public/demi-widget.js` 是 canonical 源，头部 `DEMI_WIDGET_VERSION` 是当前版本号。
+`scripts/release-widget.mjs`（`npm run build` 自动执行）会：
+
+1. 生成 `public/demi-widget@<version>.js` 版本化副本（客户嵌入用，永不原地变更）；
+2. 计算 sha384 SRI 写入 `src/widget-meta.json`，Create 页的嵌入片段会带上 `integrity` + `crossorigin`。
+
+修改 widget 行为时必须升 `DEMI_WIDGET_VERSION`，旧版本副本由 release 脚本自动清理（已发布给客户的版本如需长期保留，部署平台侧应保留历史构建）。
 
 ## 本地运行
 
@@ -252,9 +262,9 @@ npm run build
 
 至少验证以下流程：
 
+- [ ] `npm test` 通过。
 - [ ] 首页按钮可以交互。
-- [ ] 可以注册新账号。
-- [ ] 可以使用注册账号登录。
+- [ ] 可以登录（Supabase 已配置时注册/登录真账号；未配置时演示登录可进入）。
 - [ ] 刷新后可以恢复登录状态。
 - [ ] 默认角色是尾尾。
 - [ ] 可以进入角色素材库并更换角色。
@@ -270,9 +280,9 @@ npm run build
 ## 当前已知限制与后续重点
 
 - HTML 上传最适合自包含文件，依赖本地外部资源的 HTML 可能无法完整显示。
-- 浏览器 Web Speech 音质依赖用户设备，后续可接入高质量云端 TTS。
-- 用户系统目前使用本地 JSON，需迁移到正式数据库。
-- 当前没有保存用户演示项目，刷新创建页后内容会丢失。
-- 还需要补充自动化测试、错误边界、上传文件安全检查和生产部署配置。
+- 云端 TTS（cogtts）需要智谱余额；无余额/未配置时回退浏览器 Web Speech，音质依赖用户设备。
+- 限流是单实例内存版，Vercel 多实例下不精确；按客户计量需要后续的 site key 系统。
+- 当前没有保存用户演示项目（讲稿/导览配置），刷新创建页后内容会丢失——托管分享链接是下一个迭代重点。
+- 还需要补充前端组件测试、错误边界、上传文件安全检查。
 
 如果需求与本文冲突，以用户最新的明确要求为准，并在完成修改后同步更新 README。
