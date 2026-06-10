@@ -9,6 +9,7 @@
     "server": "node server/index.js",
     "web": "vite",
     "build": "vite build",
+    "test": "vitest run",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -21,6 +22,7 @@
     "concurrently": "^9.1.0",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
-    "vite": "^6.0.7"
+    "vite": "^6.0.7",
+    "vitest": "^4.1.8"
   }
 }
