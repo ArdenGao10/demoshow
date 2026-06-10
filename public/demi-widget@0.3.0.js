@@ -12,7 +12,7 @@
 (function () {
   "use strict";
   // 版本号:release 脚本据此生成 demi-widget@<version>.js 与 SRI;改 widget 行为请同步升版本
-  var DEMI_WIDGET_VERSION = "0.2.0";
+  var DEMI_WIDGET_VERSION = "0.3.0";
   const INK = "#3B332E", PAPER = "#FBF3E4";
   const C = { accent: "#E8915B", blush: "#F3B58C", shoe: "#C9702F" };
 
@@ -868,6 +868,32 @@
   function visibleFingerprint() {
     return collectVisibleInteractables().map(v => v.selector + "::" + (v.text || "")).join("|");
   }
+  // 页面可见正文摘要:喂给 AI 当分析上下文(只读,不作为站点)。
+  // innerText 只含可见文本,deck/弹窗类页面拿到的就是当前画面的真实内容。
+  function collectPageText(maxLen) {
+    try {
+      return (document.body.innerText || "").replace(/\s+/g, " ").trim().slice(0, maxLen || 1500);
+    } catch (e) { return ""; }
+  }
+  async function requestAgentStep(opts, history, visible) {
+    const resp = await fetch(API_BASE + "/api/agent-step", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: opts.name || "Demi",
+        tone: opts.tone || "轻松亲切",
+        pageTitle: document.title || "",
+        pageText: collectPageText(1500),
+        history,
+        visible,
+      }),
+    });
+    if (!resp.ok) {
+      const j = await resp.json().catch(() => ({}));
+      throw new Error(j.error || `agent-step ${resp.status}`);
+    }
+    return resp.json();
+  }
 
   let agentRunning = false;
   async function agentLoop(opts) {
@@ -891,41 +917,43 @@
 
     const history = [];
     const MAX = 8;
+    let prefetched = null; // { step, visible }:narrate 讲话期间并行拿到的下一轮决策
+    let prevLine = "";
     try {
       for (let iter = 1; iter <= MAX; iter++) {
         if (!charEl || !auto) break;
-        await wait(420); // 让任何动画落定
+        await wait(prefetched ? 60 : 420); // 预取命中就不用再等动画落定
         if (iter === 1) hideAutoToast();
-        const visible = collectVisibleInteractables();
-        if (!visible.length) {
-          showAutoToast("当前画面 Demi 看不到可交互的东西");
-          await wait(1400);
-          break;
+
+        let visible, step;
+        if (prefetched) {
+          ({ step, visible } = prefetched);
+          prefetched = null;
+        }
+        if (!step) {
+          visible = collectVisibleInteractables();
+          if (!visible.length) {
+            showAutoToast("当前画面 Demi 看不到可交互的东西");
+            await wait(1400);
+            break;
+          }
+          try {
+            step = await requestAgentStep(opts, history, visible);
+          } catch (e) {
+            showAutoToast("Demi 思考失败:" + e.message);
+            await wait(2400);
+            break;
+          }
         }
 
-        let step;
-        try {
-          const resp = await fetch(API_BASE + "/api/agent-step", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name: opts.name || "Demi",
-              tone: opts.tone || "轻松亲切",
-              pageTitle: document.title || "",
-              history,
-              visible,
-            }),
-          });
-          if (!resp.ok) {
-            const j = await resp.json().catch(() => ({}));
-            throw new Error(j.error || `agent-step ${resp.status}`);
-          }
-          step = await resp.json();
-        } catch (e) {
-          showAutoToast("Demi 思考失败:" + e.message);
-          await wait(2400);
-          break;
+        // 收敛守卫:选了讲过的元素、或和上一句一字不差 → 别原地打转,体面收场。
+        // (内容贫瘠的页面上模型容易反复挑同一个标题,与其重复 8 轮不如早点结束)
+        const repeatedSel = step.selector && history.some(h => h.selector === step.selector);
+        const sameLine = step.line && step.line === prevLine;
+        if (step.action !== "done" && (repeatedSel || sameLine)) {
+          step = { action: "done", line: "这页就先讲到这,欢迎自己上手逛一逛!" };
         }
+        prevLine = step.line || prevLine;
 
         if (stepLabel) stepLabel.textContent = `${iter}`;
 
@@ -953,6 +981,15 @@
         if (!charEl) break;
         bubbleEl.textContent = step.line || "";
         bubbleEl.classList.add("show");
+
+        // narrate 不改变画面 → 讲这句的同时并行请求下一轮决策,把轮间静默压到接近 0。
+        // click 会换场景,下一轮必须重新观察,不预取。
+        let nextPromise = null;
+        if (step.action !== "click" && iter < MAX) {
+          const histNext = history.concat([{ action: "narrate", selector: step.selector, line: step.line }]);
+          nextPromise = requestAgentStep(opts, histNext, visible).catch(() => null);
+        }
+
         await speakAsync(step.line || "");
         history.push({ action: step.action, selector: step.selector, line: step.line });
 
@@ -960,6 +997,9 @@
           const before = visibleFingerprint();
           try { el.click(); } catch (e) {}
           await waitForDomShift(before, 2800);
+        } else if (nextPromise) {
+          const nextStep = await nextPromise;
+          if (nextStep) prefetched = { step: nextStep, visible };
         }
       }
     } catch (e) {
@@ -1039,6 +1079,11 @@ ${stepsLines}
         setTimeout(autoPlayIfHash, 0);
         return;
       }
+      // #demi-auto(AI 自动导览)优先:页面自带的 start() 同样让路,不然两条导览抢小人
+      if (!opts._force && typeof location !== "undefined" && location.hash === "#demi-auto") {
+        setTimeout(autoAutoIfHash, 0);
+        return;
+      }
       steps = Array.isArray(tourSteps) ? tourSteps : [];
       auto = opts.auto !== false;
       name = opts.name || "Demi";
@@ -1100,9 +1145,14 @@ ${stepsLines}
     window.addEventListener("DOMContentLoaded", autoOnHash);
   }
   window.addEventListener("hashchange", () => {
-    if (location.hash === "#demi-edit" && !edit) startEdit();
-    else if (location.hash !== "#demi-edit" && edit) stopEdit();
-    else if (/^#demi-play=/.test(location.hash)) autoPlayIfHash();
+    if (location.hash === "#demi-edit") {
+      if (!edit) startEdit();
+      return;
+    }
+    // 先退出编辑模式,再继续判断新 hash 要不要开播 —— 否则从 #demi-edit
+    // 直接改成 #demi-auto / #demi-play 时,退出编辑就把后面的分支短路掉了
+    if (edit) stopEdit();
+    if (/^#demi-play=/.test(location.hash)) autoPlayIfHash();
     else if (location.hash === "#demi-auto") autoAutoIfHash();
   });
 })();

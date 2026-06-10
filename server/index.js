@@ -450,15 +450,18 @@ function buildPlannerSystem(name) {
 只输出 JSON:{"steps":[{"selector":"...","line":"...","action":"click"}, ...]}
 不要 markdown,不要多余文字。`;
 }
-function buildPlannerUser({ name, tone, pageTitle, visible }) {
+function buildPlannerUser({ name, tone, pageTitle, pageText, visible }) {
   const toneDesc = ({ 轻松亲切: "轻松、亲切", 专业稳重: "专业、稳重", 元气满满: "活力满满、有感染力" })[tone] || "轻松亲切";
   const list = visible.map((v, i) =>
     `${i + 1}. [${v.role || v.tag}] "${String(v.text || "").slice(0, 80)}"  →  ${v.selector}`
   ).join("\n");
+  const textBlock = pageText
+    ? `\n【页面正文摘要(讲解词要紧扣这里的真实内容)】\n${pageText}\n`
+    : "";
   return `讲解人:${name || "Demi"}
 语气:${toneDesc}
 页面标题:${pageTitle || "(无)"}
-
+${textBlock}
 【页面上能交互的元素清单】
 ${list}
 
@@ -468,6 +471,7 @@ ${list}
 app.post("/api/plan-tour", async (req, res) => {
   try {
     const { name, tone, pageTitle, visible } = req.body || {};
+    const pageText = String(req.body?.pageText || "").slice(0, 2000);
     if (!Array.isArray(visible) || !visible.length) {
       return res.status(400).json({ error: "缺少 visible 元素清单" });
     }
@@ -499,7 +503,7 @@ app.post("/api/plan-tour", async (req, res) => {
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: buildPlannerSystem(name) },
-            { role: "user", content: buildPlannerUser({ name, tone, pageTitle, visible }) },
+            { role: "user", content: buildPlannerUser({ name, tone, pageTitle, pageText, visible }) },
           ],
         }),
       });
@@ -529,7 +533,11 @@ function buildAgentSystem(name) {
 - history:你已经讲过的每一句、点过的每个元素
 - visible:当前画面上能交互的所有元素(每点一次画面会切换,visible 也会换)
 
-你的任务:看着 history 和 visible,只决定**下一个动作**。
+- pageText:当前画面的正文摘要(页面上真实显示的文字)
+
+你的任务:看着 pageText、history 和 visible,只决定**下一个动作**。
+讲解词必须紧扣 pageText 里的真实内容——点出具体的功能名、数据、卖点,
+绝不允许只说"这里很有趣""充满创意"这种放之四海皆准的空话。
 
 动作选项:
 - "narrate":走到某个元素旁边,讲一句(不点击)
@@ -548,7 +556,7 @@ function buildAgentSystem(name) {
 只输出 JSON:{"action":"narrate|click|done","selector":"...","line":"..."}
 done 不需要 selector。`;
 }
-function buildAgentUser({ name, tone, pageTitle, history, visible }) {
+function buildAgentUser({ name, tone, pageTitle, pageText, history, visible }) {
   const toneDesc = ({ 轻松亲切: "轻松、亲切", 专业稳重: "专业、稳重", 元气满满: "活力满满、有感染力" })[tone] || "轻松亲切";
   const hist = history.length
     ? history.map((h, i) => `${i + 1}. [${h.action}] ${h.selector || "-"}  「${(h.line || "").slice(0, 60)}」`).join("\n")
@@ -556,10 +564,13 @@ function buildAgentUser({ name, tone, pageTitle, history, visible }) {
   const list = visible.map((v, i) =>
     `${i + 1}. [${v.role || v.tag}] "${String(v.text || "").slice(0, 80)}"  →  ${v.selector}`
   ).join("\n");
+  const textBlock = pageText
+    ? `\n【当前画面正文摘要(讲解词要紧扣这里的真实内容)】\n${pageText}\n`
+    : "";
   return `讲解人:${name || "Demi"}
 语气:${toneDesc}
 页面标题:${pageTitle || "(无)"}
-
+${textBlock}
 【你已经做过的事(history)】
 ${hist}
 
@@ -572,6 +583,7 @@ ${list}
 app.post("/api/agent-step", async (req, res) => {
   try {
     const { name, tone, pageTitle, history, visible } = req.body || {};
+    const pageText = String(req.body?.pageText || "").slice(0, 2000);
     if (!Array.isArray(visible) || !visible.length) {
       return res.status(400).json({ error: "缺少 visible 元素清单" });
     }
@@ -612,7 +624,7 @@ app.post("/api/agent-step", async (req, res) => {
           response_format: { type: "json_object" },
           messages: [
             { role: "system", content: buildAgentSystem(name) },
-            { role: "user", content: buildAgentUser({ name, tone, pageTitle, history: hist, visible }) },
+            { role: "user", content: buildAgentUser({ name, tone, pageTitle, pageText, history: hist, visible }) },
           ],
         }),
       });
