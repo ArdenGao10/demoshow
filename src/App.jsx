@@ -94,7 +94,6 @@ export default function App() {
   const handleLogout = useCallback(async () => {
     if (supabaseEnabled) await supabase.auth.signOut().catch(() => {});
     localStorage.removeItem("demi_local_user");
-    localStorage.removeItem("demi_token");
     // 退出后把草稿一并清掉，下一个登录的人从干净状态开始。
     localStorage.removeItem("demi_draft_deck");
     localStorage.removeItem("demi_formId");

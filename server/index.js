@@ -1,11 +1,11 @@
 // server/index.js — tiny Express proxy for 智谱 GLM.
 // Keeps ZHIPU_API_KEY server-side; the browser only ever talks to /api/generate.
+// 账号系统走 Supabase(前端直连),服务端不再保存用户。
 import express from "express";
 import dotenv from "dotenv";
-import crypto from "node:crypto";
-import fs from "node:fs/promises";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { createRateLimiter } from "./lib/rateLimit.js";
+import { createOriginCheck } from "./lib/cors.js";
+import { cacheKey, createTtsCache } from "./lib/ttsCache.js";
 
 dotenv.config();
 
@@ -16,57 +16,45 @@ const GLM_URL = "https://open.bigmodel.cn/api/paas/v4/chat/completions";
 const TTS_URL = "https://open.bigmodel.cn/api/paas/v4/audio/speech";
 const TTS_MODEL = process.env.ZHIPU_TTS_MODEL || "cogtts";
 const TTS_VOICE = process.env.ZHIPU_TTS_VOICE || "tongtong";
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const USERS_FILE = path.join(__dirname, "data", "users.json");
-const TOKEN_SECRET = process.env.TOKEN_SECRET || "demi-local-dev-secret";
+
+// widget 嵌在用户自己的域名里,需要跨域调这几个端点
+const CROSS_ORIGIN_PATHS = new Set(["/api/generate-tour", "/api/plan-tour", "/api/agent-step", "/api/tts"]);
+// 所有会花智谱余额的端点,统一限流
+const PAID_PATHS = new Set(["/api/generate", "/api/generate-tour", "/api/plan-tour", "/api/agent-step", "/api/tts"]);
+
+const originAllowed = createOriginCheck(process.env.WIDGET_ALLOWED_ORIGINS);
+const rateCheck = createRateLimiter({ windowMs: 60000, max: Number(process.env.RATE_LIMIT_PER_MIN) || 20 });
+const ttsCache = createTtsCache({ dir: process.env.TTS_CACHE_DIR });
 
 const app = express();
 app.use(express.json({ limit: "4mb" }));
 
-// Widget 部署在用户自己的域名(比如 ardencosmic.com),要从那边跨域调 /api/generate-tour。
-// 只对这个端点开放跨域,其他 /api 路径保持同源。
+// 跨域:WIDGET_ALLOWED_ORIGINS 配了白名单就只放名单内的站点(回显 Origin),
+// 留空保持全开(兼容已部署的 widget);名单外的 Origin 不下发 CORS 头,浏览器侧拦截。
 app.use((req, res, next) => {
-  // widget 嵌在用户自己的域名(比如 ardencosmic.com)里,需要跨域调这几个端点
-  if (req.path === "/api/generate-tour" || req.path === "/api/plan-tour"
-      || req.path === "/api/agent-step" || req.path === "/api/tts") {
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  if (CROSS_ORIGIN_PATHS.has(req.path)) {
+    const origin = req.headers.origin;
+    if (originAllowed(origin)) {
+      res.setHeader("Access-Control-Allow-Origin", origin || "*");
+      res.setHeader("Vary", "Origin");
+      res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    }
     if (req.method === "OPTIONS") return res.status(204).end();
   }
   next();
 });
 
-app.post("/api/auth/register", async (req, res) => {
-  const email = String(req.body?.email || "").trim().toLowerCase();
-  const password = String(req.body?.password || "");
-  const name = String(req.body?.name || "").trim() || email.split("@")[0];
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: "请输入有效邮箱" });
-  if (password.length < 6) return res.status(400).json({ error: "密码至少 6 位" });
-  const users = await readUsers();
-  if (users.some((u) => u.email === email)) return res.status(409).json({ error: "该邮箱已注册" });
-  const salt = crypto.randomBytes(16).toString("hex");
-  const user = { id: crypto.randomUUID(), email, name, salt, passwordHash: hashPassword(password, salt), createdAt: new Date().toISOString() };
-  users.push(user);
-  await writeUsers(users);
-  res.status(201).json(authResponse(user));
-});
-
-app.post("/api/auth/login", async (req, res) => {
-  const email = String(req.body?.email || "").trim().toLowerCase();
-  const password = String(req.body?.password || "");
-  const users = await readUsers();
-  const user = users.find((u) => u.email === email);
-  if (!user || hashPassword(password, user.salt) !== user.passwordHash) return res.status(401).json({ error: "邮箱或密码不正确" });
-  res.json(authResponse(user));
-});
-
-app.get("/api/auth/me", async (req, res) => {
-  const payload = verifyToken(String(req.headers.authorization || "").replace(/^Bearer\s+/i, ""));
-  if (!payload) return res.status(401).json({ error: "登录已过期" });
-  const user = (await readUsers()).find((u) => u.id === payload.id);
-  if (!user) return res.status(401).json({ error: "账号不存在" });
-  res.json({ user: publicUser(user) });
+// 限流:按来源 IP,挡住对花钱端点的脚本刷量。
+app.use((req, res, next) => {
+  if (req.method !== "POST" || !PAID_PATHS.has(req.path)) return next();
+  const ip = String(req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "?").split(",")[0].trim();
+  const r = rateCheck(ip);
+  if (!r.ok) {
+    res.setHeader("Retry-After", String(r.retryAfterSec));
+    return res.status(429).json({ error: "请求太频繁,请稍后再试" });
+  }
+  next();
 });
 
 function buildSystem(presenterName) {
@@ -130,6 +118,16 @@ app.post("/api/tts", async (req, res) => {
     const text = String(req.body?.text || "").trim();
     const voice = String(req.body?.voice || "").trim() || TTS_VOICE;
     if (!text) return res.status(400).json({ error: "缺少 text" });
+
+    // 同一段(模型+音色+文本)只付费合成一次,命中直接回吐。
+    const key = cacheKey({ model: TTS_MODEL, voice, text: text.slice(0, 1000) });
+    const cached = await ttsCache.get(key);
+    if (cached) {
+      res.setHeader("Content-Type", "audio/wav");
+      res.setHeader("Cache-Control", "no-store");
+      res.setHeader("X-Demi-Cache", "hit");
+      return res.send(cached);
+    }
     if (!API_KEY) return res.status(503).json({ error: "未配置 ZHIPU_API_KEY" });
 
     const ctrl = new AbortController();
@@ -165,8 +163,10 @@ app.post("/api/tts", async (req, res) => {
     // cogtts 会在语音前固定加约 2 秒的“嘟嘟”导入音 + 句尾留白；裁掉它们，
     // 既消除杂音，也缩短页间停顿。解析失败时回退原始音频，绝不影响可用性。
     const trimmed = trimSilenceAndTone(buf);
+    await ttsCache.put(key, trimmed);
     res.setHeader("Content-Type", "audio/wav");
     res.setHeader("Cache-Control", "no-store");
+    res.setHeader("X-Demi-Cache", "miss");
     return res.send(trimmed);
   } catch (err) {
     console.error("[/api/tts]", err);
@@ -256,6 +256,9 @@ app.post("/api/generate", async (req, res) => {
     const { presenterName, tone, slides } = req.body || {};
     if (!Array.isArray(slides) || slides.length === 0) {
       return res.status(400).json({ error: "缺少 slides" });
+    }
+    if (slides.length > 60) {
+      return res.status(400).json({ error: "页数过多(上限 60 页)" });
     }
     if (!API_KEY) {
       return res.json({
@@ -753,36 +756,6 @@ function localDemoScripts({ presenterName, tone, slides }) {
     }
     return { page: i + 1, line };
   });
-}
-
-function hashPassword(password, salt) {
-  return crypto.scryptSync(password, salt, 64).toString("hex");
-}
-function publicUser(user) {
-  return { id: user.id, email: user.email, name: user.name };
-}
-function authResponse(user) {
-  const payload = Buffer.from(JSON.stringify({ id: user.id, exp: Date.now() + 7 * 864e5 })).toString("base64url");
-  const sig = crypto.createHmac("sha256", TOKEN_SECRET).update(payload).digest("base64url");
-  return { user: publicUser(user), token: `${payload}.${sig}` };
-}
-function verifyToken(token) {
-  try {
-    const [payload, sig] = token.split(".");
-    const expected = crypto.createHmac("sha256", TOKEN_SECRET).update(payload).digest("base64url");
-    if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
-    const data = JSON.parse(Buffer.from(payload, "base64url").toString());
-    return data.exp > Date.now() ? data : null;
-  } catch {
-    return null;
-  }
-}
-async function readUsers() {
-  try { return JSON.parse(await fs.readFile(USERS_FILE, "utf8")); } catch { return []; }
-}
-async function writeUsers(users) {
-  await fs.mkdir(path.dirname(USERS_FILE), { recursive: true });
-  await fs.writeFile(USERS_FILE, JSON.stringify(users, null, 2));
 }
 
 if (!process.env.VERCEL) {
