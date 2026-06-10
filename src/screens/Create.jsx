@@ -5,6 +5,7 @@ import SlideFrame from "../components/SlideFrame.jsx";
 import { start as demiStart, stop as demiStop } from "../lib/demiWidget.js";
 import { formFrames } from "../lib/charFrames.jsx";
 import { Sparkle, Warn, Trash, Rabbit, Medal, ArrowUp } from "../lib/icons.jsx";
+import widgetMeta from "../widget-meta.json";
 
 const PICKS = [HUMANS[5], HUMANS[3], HUMANS[1], PETS[0], CHIBI[0]];
 const LAYOUTS = [
@@ -167,9 +168,11 @@ function EmbedPanel({ form, formId, onPickForm, onOpenLibrary, readOnly = false 
   const lineArr = lines.split("\n").map((s) => s.trim()).filter(Boolean);
   const steps = lineArr.map((line, i) => ({ selector: SAMPLE_SITES[i % SAMPLE_SITES.length].selector, line }));
 
-  const widgetUrl = (typeof window !== "undefined" ? window.location.origin : "") + "/demi-widget.js";
-  const installer = `<script src="${widgetUrl}"></script>`;
-  const snippet = `<script src="${widgetUrl}"></script>
+  // 版本化 URL + SRI:升级 widget 不影响已嵌入的客户网站,文件被篡改时浏览器拒绝执行
+  const widgetUrl = (typeof window !== "undefined" ? window.location.origin : "") + "/" + widgetMeta.file;
+  const scriptTag = `<script src="${widgetUrl}" integrity="${widgetMeta.integrity}" crossorigin="anonymous"></script>`;
+  const installer = scriptTag;
+  const snippet = `${scriptTag}
 <script>
   DemiTour.start([
 ${lineArr.map((l, i) => `    { selector: "#换成你的元素${i + 1}", line: ${JSON.stringify(l)} },`).join("\n")}
